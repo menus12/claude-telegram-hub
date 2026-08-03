@@ -1,0 +1,24 @@
+{
+  "name": "@claude-telegram-hub/protocol",
+  "version": "0.0.0",
+  "description": "Shared message types, session↔hub wire protocol, and config schemas for the hub and the thin channel",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist tsconfig.build.tsbuildinfo"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

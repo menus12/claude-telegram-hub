@@ -9,6 +9,8 @@
 node_modules/
 dist/
 *.log
+*.tsbuildinfo
+coverage/
 
 # bun
 bun.lockb
