@@ -131,12 +131,12 @@ describe("hub ↔ real channel integration", () => {
     expect(a.injected).toHaveLength(0);
   });
 
-  it("does not deliver (or notify) when a tagged agent is offline", async () => {
+  it("posts an in-room notice when a tagged agent is offline", async () => {
     const { adapter } = await startHub();
     // no session for "ghost"
     await adapter.deliver(humanInbound({ mentions: ["ghost"] }));
-    await delay(30);
-    expect(adapter.sent).toHaveLength(0); // offline-room notices arrive in Stage 4
+    const notice = await adapter.waitForSent((s) => s.out.kind === "notice");
+    expect(notice.out.text).toContain("@ghost");
   });
 
   it("rejects a channel presenting the wrong secret", async () => {

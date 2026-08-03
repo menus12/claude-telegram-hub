@@ -12,12 +12,17 @@ The core is **adapter-agnostic** — transports plug in behind one `TransportAda
   orchestration.
 - **Agent registry** — `agent name ↔ live session`; a restarting session re-attaches and
   displaces its old connection without disturbing other agents.
-- **Routing** — explicit-mention-only delivery to connected agents; allowlist enforced on human
-  senders; a session's reply is sent back to its room via the adapter.
+- **Routing** — explicit-mention-only delivery to **every** tagged, connected agent; allowlist
+  enforced on human senders; a session's reply is posted back to its room via the adapter.
+- **Agent↔agent** — when a reply tags a peer, the hub re-injects the hop into that peer's session
+  (labeled as agent-origin) **and** posts a human-visible copy to the room; the platform never
+  carries bot→bot, so the hub does. A reply never re-injects into the replying agent itself.
+- **Offline notices** — a tagged agent with no live session is reported in the room, never
+  silently dropped.
 - **Adapters** — `loopback` (in-memory, for dev/test) and `telegram` (grammY long-poll). The core
   is adapter-agnostic; both implement the one `TransportAdapter` interface.
 
-Group routing + agent↔agent re-injection (Stage 4) and the loop governor (Stage 5) build on this.
+The loop governor that bounds agent↔agent chains builds on this in Stage 5.
 
 ## Run (development)
 
