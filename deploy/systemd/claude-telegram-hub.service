@@ -1,0 +1,34 @@
+# Co-located deployment: run the hub as a systemd service next to the sessions.
+#
+#   sudo cp deploy/systemd/claude-telegram-hub.service /etc/systemd/system/
+#   sudo install -d -o hub -g hub /etc/claude-telegram-hub
+#   sudo cp packages/hub/.env.example /etc/claude-telegram-hub/hub.env  # then edit, chmod 600
+#   sudo systemctl daemon-reload && sudo systemctl enable --now claude-telegram-hub
+#
+# Adjust User/WorkingDirectory/ExecStart paths to your install location.
+
+[Unit]
+Description=claude-telegram-hub (Telegram ↔ Claude Code transport hub)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hub
+Group=hub
+WorkingDirectory=/opt/claude-telegram-hub
+EnvironmentFile=/etc/claude-telegram-hub/hub.env
+ExecStart=/usr/bin/node packages/hub/dist/main.js
+Restart=always
+RestartSec=2
+# Only one process may hold the bot token; do not run multiple instances.
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=
+
+[Install]
+WantedBy=multi-user.target

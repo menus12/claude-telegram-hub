@@ -10,8 +10,9 @@ service authenticates to Telegram, and each Claude session attaches to it throug
 Claude Code *channel*. Transport adapters are pluggable (Telegram today; Microsoft Teams /
 Slack are future adapters behind the same interface).
 
-> **Status: design phase.** The architecture is agreed (see the pinned design issue #1); the
-> implementation is being built. Nothing here is runnable yet.
+> **Status: v1 implemented.** The protocol/config contract, the thin channel, the hub core, the
+> Telegram adapter, group routing + agent↔agent coordination, and the loop governor are all built
+> and CI-tested (milestones in issue #1). Run it with `docker compose up` or the deploys below.
 
 ## Why not the built-in channel plugins?
 
@@ -61,15 +62,28 @@ Full technical reference: [docs/conventions.md](docs/conventions.md).
   agent→agent hops decrement it, human messages refill it, and it freezes with a notice at
   zero. No runaway agent-to-agent conversations.
 
-## Repository layout (intended)
+## Repository layout
 
 ```
-hub/                 always-on hub service
-  adapters/telegram/ Telegram transport adapter (long-poll)
-  router/            agent registry, @tag routing, loop governor
-channel/             thin Claude Code channel plugin (MCP server + plugin.json + .mcp.json)
-docs/                conventions.md (technical reference) + design/ + runbooks/
+packages/
+  protocol/   shared message types, session↔hub wire protocol, config schemas (the versioned seam)
+  channel/    thin Claude Code channel plugin (MCP server + .claude-plugin/plugin.json + .mcp.json)
+  hub/        always-on hub: session server, registry, @tag routing, loop governor, adapters/telegram
+deploy/systemd/       systemd unit for a co-located hub
+docs/                 conventions.md, protocol.md, configuration.md, deploy/, runbooks/
+Dockerfile · docker-compose.yml
 ```
+
+## Deploy
+
+One always-on hub; the **same image runs everywhere** — only the environment differs
+([docs/configuration.md](docs/configuration.md)).
+
+- **Docker / Compose** — `cp packages/hub/.env.example .env`, edit it, then `docker compose up -d`.
+- **Azure Container Instances** — [docs/deploy/azure-container-instances.md](docs/deploy/azure-container-instances.md)
+- **systemd (co-located)** — [deploy/systemd/claude-telegram-hub.service](deploy/systemd/claude-telegram-hub.service)
+- **Thin channel install** — [docs/deploy/channel-install.md](docs/deploy/channel-install.md)
+- **Operations runbook** — [docs/runbooks/operations.md](docs/runbooks/operations.md)
 
 ## Contributing
 

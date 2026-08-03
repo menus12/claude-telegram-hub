@@ -1,0 +1,14 @@
+# Local / self-hosted hub. Config comes from a gitignored .env (see
+# packages/hub/.env.example). The same image runs everywhere — only .env differs.
+services:
+  hub:
+    build: .
+    image: claude-telegram-hub:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Reachable inside the container network; override in .env as needed.
+      HUB_BIND_HOST: 0.0.0.0
+      HUB_BIND_PORT: "8787"
+    ports:
+      - "8787:8787"
