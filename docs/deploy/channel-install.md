@@ -22,7 +22,46 @@ npm pack -w @claude-telegram-hub/channel
 The tarball (`claude-telegram-hub-channel-<version>.tgz`) is the installable artifact — the same
 package works for every deployment.
 
-## Attach a session
+## Install as a plugin + activate the channel (recommended)
+
+Loading via `--plugin-dir` connects the channel to the hub, but Claude Code will **not surface
+channel injections** from a channel that isn't *activated* — it gates injection behind an
+approved-channels allowlist. For a real end-to-end channel (DMs rendered as `<channel>` turns),
+install it as a plugin and activate it explicitly.
+
+This repo ships a marketplace manifest (`.claude-plugin/marketplace.json`) pointing at the channel:
+
+```sh
+npm run build -w @claude-telegram-hub/channel
+claude plugin marketplace add /path/to/claude-telegram-hub
+claude plugin install telegram-hub@claude-telegram-hub
+```
+
+Then **activate the channel per session**. A locally-developed channel isn't on the approved
+allowlist, so use the dev flag with the `plugin:<name>@<marketplace>` tag:
+
+```sh
+claude --dangerously-load-development-channels plugin:telegram-hub@claude-telegram-hub
+```
+
+- The tag format matters: `plugin:<plugin-name>@<marketplace-name>` for a plugin-provided channel
+  (or `server:<name>` for a manually configured MCP server). The bare server name is rejected.
+- `--channels <servers…>` activates channels already on the approved allowlist;
+  `--dangerously-load-development-channels` is the local-dev path for unapproved ones.
+- Provide the channel's config via `~/.config/claude-telegram-hub/config.json` (the installed
+  plugin runs with a clean env), or export `TELEGRAM_HUB_*` before launching.
+- Verify the server connected with `claude mcp list` — it appears as
+  `plugin:telegram-hub:telegram-hub … ✔ Connected`.
+
+Validated live (Claude Code 2.1.205): with the plugin installed and the channel activated this
+way, a Telegram DM `@re-infra …` rendered as a `<channel>` turn and the session's reply returned
+to the DM.
+
+## Attach a session (dev, transport only)
+
+> Note: `--plugin-dir` is fine for exercising the transport (the channel connects and the hub
+> injects), but injection **surfacing** requires the install + activation flow above.
+
 
 Point Claude Code at the plugin directory and activate the channel, supplying this session's hub
 coordinates via the environment (or a repo `.telegram-hub.json`):
@@ -66,10 +105,11 @@ gitignored by this repo's `.gitignore`.
 - **Nothing registers on the hub / no `telegram-hub` MCP server.** Run `/mcp` in the session. If
   `telegram-hub` is missing or errored, check its stderr for a config error (missing `hubUrl` /
   `sessionSecret`), and confirm `dist/` is built (`npm run build -w @claude-telegram-hub/channel`).
-- **Registers, but DMs don't surface as `<channel>` turns.** Verified findings from live testing
-  (Claude Code 2.1.205): a `--plugin-dir` dev plugin connects to the hub and the hub injects, but
-  the host surfaced the injection reliably only for a **properly installed/enabled** channel — and
-  only with a **single `getUpdates` consumer per bot token**. If you run another Telegram channel
-  (e.g. the official plugin) on the same token, its poller competes with the hub and delivery
-  becomes flaky. Run exactly one poller for the token, and prefer a real install over `--plugin-dir`
-  for injection.
+- **Registers, but DMs don't surface as `<channel>` turns.** The channel must be **activated** —
+  Claude Code gates injection behind an approved-channels allowlist. Install the plugin and launch
+  with `--dangerously-load-development-channels plugin:telegram-hub@claude-telegram-hub` (see
+  "Install as a plugin + activate the channel" above). `--plugin-dir` alone connects the transport
+  but never surfaces injections. Verified live (Claude Code 2.1.205) for both DM and group.
+- **One `getUpdates` consumer per token.** If another Telegram channel (e.g. the official plugin)
+  runs on the same bot token, its poller competes with the hub and delivery gets flaky. Disable it
+  (`claude plugin disable telegram@claude-plugins-official`) and run exactly one poller.

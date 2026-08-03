@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-telegram-hub",
+  "description": "Thin Claude Code channel for the claude-telegram-hub transport.",
+  "owner": { "name": "claude-telegram-hub" },
+  "plugins": [
+    {
+      "name": "telegram-hub",
+      "description": "Thin channel that connects a Claude Code session to a claude-telegram-hub instance: injects inbound messages and relays replies through the hub.",
+      "category": "productivity",
+      "source": "./packages/channel"
+    }
+  ]
+}
