@@ -19,10 +19,13 @@ The core is **adapter-agnostic** — transports plug in behind one `TransportAda
   carries bot→bot, so the hub does. A reply never re-injects into the replying agent itself.
 - **Offline notices** — a tagged agent with no live session is reported in the room, never
   silently dropped.
+- **Loop governor** — the hard backstop against runaway agent↔agent chains. A human message
+  tagging agents opens a per-room coordination thread at the hop budget (`HUB_HOP_BUDGET`,
+  default 6); each agent→agent re-injection consumes one hop; at zero the hub freezes
+  agent↔agent routing there and posts a notice. Any human message refills and resumes it.
+  Human→agent delivery is never frozen.
 - **Adapters** — `loopback` (in-memory, for dev/test) and `telegram` (grammY long-poll). The core
   is adapter-agnostic; both implement the one `TransportAdapter` interface.
-
-The loop governor that bounds agent↔agent chains builds on this in Stage 5.
 
 ## Run (development)
 
