@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "telegram-hub": {
+      "command": "node",
+      "args": ["./dist/main.js"]
+    }
+  }
+}

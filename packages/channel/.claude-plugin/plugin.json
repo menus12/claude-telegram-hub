@@ -1,0 +1,6 @@
+{
+  "name": "telegram-hub",
+  "description": "Thin channel that connects this Claude Code session to a claude-telegram-hub instance: injects inbound messages and relays replies through the hub.",
+  "version": "0.0.0",
+  "author": { "name": "claude-telegram-hub" }
+}

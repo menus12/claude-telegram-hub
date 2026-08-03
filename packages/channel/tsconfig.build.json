@@ -3,9 +3,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "types": ["node"],
     "outDir": "dist",
     "rootDir": "src",
     "tsBuildInfoFile": "tsconfig.build.tsbuildinfo"
   },
+  "references": [{ "path": "../protocol/tsconfig.build.json" }],
   "include": ["src/**/*"]
 }
