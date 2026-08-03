@@ -1,0 +1,54 @@
+name: Release
+
+# Build and smoke-test the shippable artifacts on a version tag. This does not
+# publish anywhere by itself — it proves the hub image and the channel package
+# build reproducibly and run. The merge-gate lives in ci.yml.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  hub-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build hub image
+        run: docker build -t claude-telegram-hub:ci .
+
+      - name: Smoke-test the image
+        run: |
+          docker run -d --name hub \
+            -e HUB_SESSION_SECRET=s -e HUB_ALLOWLIST=1 -e HUB_ADAPTER=loopback \
+            -p 8787:8787 claude-telegram-hub:ci
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8787/healthz || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/healthz)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/readyz)" = "200"
+          test "$(docker exec hub id -u)" = "1000"   # runs as non-root
+          docker rm -f hub
+
+  channel-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @claude-telegram-hub/channel
+
+      - name: Pack and verify tarball contents
+        run: |
+          npm pack -w @claude-telegram-hub/channel
+          tgz=$(ls claude-telegram-hub-channel-*.tgz)
+          echo "packed $tgz"
+          tar -tzf "$tgz" > files.txt
+          grep -q 'package/dist/main.js' files.txt
+          grep -q 'package/.mcp.json' files.txt
+          grep -q 'package/.claude-plugin/plugin.json' files.txt
