@@ -1,4 +1,4 @@
-import { offlineTargetNotice } from "@claude-telegram-hub/protocol";
+import { loopFrozenNotice, offlineTargetNotice } from "@claude-telegram-hub/protocol";
 import type {
   HubConfig,
   InboundMessage,
@@ -8,6 +8,7 @@ import type {
 } from "@claude-telegram-hub/protocol";
 import type { TransportAdapter } from "./adapter.js";
 import { AgentRegistry } from "./registry.js";
+import { LoopGovernor } from "./governor.js";
 import { SessionServer } from "./server.js";
 import type { Logger } from "./logger.js";
 
@@ -33,10 +34,12 @@ export class Hub {
   private readonly registry = new AgentRegistry();
   private readonly server: SessionServer;
   private readonly allowlist: Set<string>;
+  private readonly governor: LoopGovernor;
   private started = false;
 
   constructor(private readonly deps: HubDeps) {
     this.allowlist = new Set(deps.config.allowlist);
+    this.governor = new LoopGovernor(deps.config.hopBudget);
     this.server = new SessionServer({
       host: deps.config.bindHost,
       port: deps.config.bindPort,
@@ -82,12 +85,17 @@ export class Hub {
       return;
     }
 
+    // Any human message refills the room's coordination thread (human presence =
+    // license to continue), unfreezing agent↔agent routing there.
+    this.governor.refill(message.room);
+
     // Explicit-mention-only routing: untagged chatter is not injected.
     if (message.mentions.length === 0) {
       this.deps.logger("debug", "no mentions; not routing", { room: message.room });
       return;
     }
 
+    // Human→agent delivery is never frozen — only agent→agent hops are bounded.
     await this.routeToMentioned(message);
   }
 
@@ -104,10 +112,19 @@ export class Hub {
       this.deps.logger("warn", "adapter send failed", { error: String(err) });
     });
 
-    // 2) Agent↔agent: re-inject the hop into any tagged peer agents. The
-    // platform never delivers bot→bot, so the hub carries it; the human already
-    // sees the visible copy posted above.
-    if (reply.mentions.length > 0) {
+    // 2) Agent↔agent: re-inject the hop into any tagged peer agents, bounded by
+    // the loop governor. The platform never delivers bot→bot, so the hub carries
+    // it; the human already sees the visible copy posted above.
+    const peers = reply.mentions.filter((m) => m !== agent);
+    if (peers.length > 0) {
+      const decision = this.governor.onAgentHop(reply.room);
+      if (!decision.allowed) {
+        this.deps.logger("info", "agent↔agent routing frozen; hop dropped", {
+          room: reply.room,
+          from: agent,
+        });
+        return;
+      }
       const reinjected: InboundMessage = {
         adapter: this.deps.adapter.name,
         room: reply.room,
@@ -119,6 +136,16 @@ export class Hub {
       void this.routeToMentioned(reinjected).catch((err: unknown) => {
         this.deps.logger("warn", "re-injection failed", { error: String(err) });
       });
+      if (decision.froze) {
+        this.deps.logger("info", "hop budget exhausted; freezing thread", {
+          room: reply.room,
+        });
+        void this.deps.adapter
+          .send({ adapter: this.deps.adapter.name, room: reply.room }, loopFrozenNotice())
+          .catch((err: unknown) => {
+            this.deps.logger("warn", "adapter send failed", { error: String(err) });
+          });
+      }
     }
   }
 
