@@ -1,0 +1,19 @@
+# secrets & local config
+.env
+.env.*
+*.token
+**/state/
+**/*.pid
+
+# node
+node_modules/
+dist/
+*.log
+
+# bun
+bun.lockb
+
+# editor / os
+.DS_Store
+.vscode/
+.idea/

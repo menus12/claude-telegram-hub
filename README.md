@@ -1,0 +1,81 @@
+# claude-telegram-hub
+
+Drive interactive **Claude Code** sessions from **Telegram** — DM a session, or run a shared
+group room where several repo-scoped Claude instances coordinate with each other, with a
+human in the loop.
+
+The hub keeps Claude exactly as it already runs — **interactive sessions on your own machine,
+your own subscription, live in each repo**. It only owns the *transport*: one always-on
+service authenticates to Telegram, and each Claude session attaches to it through a thin
+Claude Code *channel*. Transport adapters are pluggable (Telegram today; Microsoft Teams /
+Slack are future adapters behind the same interface).
+
+> **Status: design phase.** The architecture is agreed (see the pinned design issue #1); the
+> implementation is being built. Nothing here is runnable yet.
+
+## Why not the built-in channel plugins?
+
+Claude Code's built-in channel plugins bridge one bot to one session by having each session
+long-poll the chat platform itself. That's fine for a single DM but fragile at scale — one
+poller per token, no auto-restart, shared-state footguns — and it structurally can't do two
+things this project needs:
+
+- **Inbound-webhook transports** (Microsoft Teams): an ephemeral session has no stable public
+  URL to receive webhooks. A central, always-on hub does.
+- **Multi-agent coordination**: chat platforms don't deliver one bot's messages to another
+  bot, so independent sessions can't hear each other. A hub is the shared bus that relays
+  agent↔agent messages internally while the human sees everything in the group.
+
+## Architecture at a glance
+
+```
+   ┌──────────────── hub (always-on service) ─────────────────┐
+   │  adapters:  telegram (poll)   [ teams (webhook) — later ] │
+   │  sole consumer per bot · agent registry · loop governor   │
+   └───────────────▲───────────────────────────▲──────────────┘
+                   │ local socket / HTTP (register + route)
+        ┌──────────┴─────────┐          ┌───────┴────────────┐
+        │ Claude session A   │   …      │ Claude session B   │
+        │ thin channel       │          │ thin channel       │
+        │ (claude --channels)│          │ (claude --channels)│
+        └────────────────────┘          └────────────────────┘
+```
+
+- **Hub** — the single always-on owner of every platform connection, the agent registry,
+  message routing, and the loop governor. Adapters plug in behind one small interface.
+- **Thin channel** — a Claude Code channel (an MCP server) each session loads with
+  `--channels`. It polls nothing; it registers with the hub, injects inbound messages into
+  the live session, and relays the session's replies back out.
+
+Full technical reference: [docs/conventions.md](docs/conventions.md).
+
+## Concepts
+
+- **Agent** — a Claude Code session registered with the hub under a logical name (e.g.
+  `re-infra`). One Telegram bot fronts every agent; the hub routes by `@name` tag, so adding
+  an agent is config, not a new bot.
+- **Shared room** — a Telegram group where a human tags agents (`@re-infra …`) and agents tag
+  each other. The hub re-injects agent→agent messages (the platform won't carry bot→bot), so
+  coordination stays fully visible to the human and interruptible.
+- **Loop governor** — a human tag opens a coordination thread with a bounded hop budget;
+  agent→agent hops decrement it, human messages refill it, and it freezes with a notice at
+  zero. No runaway agent-to-agent conversations.
+
+## Repository layout (intended)
+
+```
+hub/                 always-on hub service
+  adapters/telegram/ Telegram transport adapter (long-poll)
+  router/            agent registry, @tag routing, loop governor
+channel/             thin Claude Code channel plugin (MCP server + plugin.json + .mcp.json)
+docs/                conventions.md (technical reference) + design/ + runbooks/
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) — issue-first, a branch per issue, a PR that links it.
+Never commit secrets; all tokens/keys come from the environment.
+
+## License
+
+[MIT](LICENSE)
