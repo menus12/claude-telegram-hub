@@ -20,7 +20,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_HOP_BUDGET` | int | `6` | Coordination-thread hops before agent→agent routing freezes. |
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
-| `HUB_BIND_PORT` | int (1–65535) | `8787` | Port for the session-facing server. |
+| `HUB_BIND_PORT` | int (0–65535) | `8787` | Port for the session-facing server (`0` = OS-assigned ephemeral). |
 | `HUB_ADAPTER` | string | `telegram` | Which transport adapter to load. |
 | `HUB_LOG_LEVEL` | enum | `info` | `debug` \| `info` \| `warn` \| `error`. |
 

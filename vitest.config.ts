@@ -9,6 +9,9 @@ export default defineConfig({
       "@claude-telegram-hub/protocol": fileURLToPath(
         new URL("./packages/protocol/src/index.ts", import.meta.url),
       ),
+      "@claude-telegram-hub/channel": fileURLToPath(
+        new URL("./packages/channel/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {

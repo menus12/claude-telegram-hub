@@ -3,6 +3,7 @@
   "files": [],
   "references": [
     { "path": "packages/protocol/tsconfig.build.json" },
-    { "path": "packages/channel/tsconfig.build.json" }
+    { "path": "packages/channel/tsconfig.build.json" },
+    { "path": "packages/hub/tsconfig.build.json" }
   ]
 }
