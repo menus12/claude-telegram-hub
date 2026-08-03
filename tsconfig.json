@@ -6,7 +6,8 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@claude-telegram-hub/protocol": ["packages/protocol/src/index.ts"]
+      "@claude-telegram-hub/protocol": ["packages/protocol/src/index.ts"],
+      "@claude-telegram-hub/channel": ["packages/channel/src/index.ts"]
     }
   },
   "include": ["packages/*/src/**/*", "packages/*/test/**/*"]

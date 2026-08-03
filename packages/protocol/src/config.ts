@@ -65,7 +65,8 @@ export const hubConfigSchema = z.object({
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
   bindHost: z.string().min(1).default("127.0.0.1"),
-  bindPort: z.number().int().min(1).max(65535).default(8787),
+  // 0 is allowed: bind an OS-assigned ephemeral port (handy in tests/containers).
+  bindPort: z.number().int().min(0).max(65535).default(8787),
   /** Which transport adapter to load. */
   adapter: z.string().min(1).default("telegram"),
   logLevel: logLevelSchema.default("info"),

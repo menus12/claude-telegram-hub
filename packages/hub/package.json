@@ -1,0 +1,27 @@
+{
+  "name": "@claude-telegram-hub/hub",
+  "version": "0.0.0",
+  "description": "The always-on hub: session-facing WS/HTTP server, agent registry, routing, and pluggable transport adapters",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "claude-telegram-hub": "./dist/main.js"
+  },
+  "files": [
+    "dist",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "clean": "tsc -b tsconfig.build.json --clean"
+  },
+  "dependencies": {
+    "@claude-telegram-hub/protocol": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@claude-telegram-hub/channel": "*",
+    "@types/ws": "^8.5.12"
+  }
+}
