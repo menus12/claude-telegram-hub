@@ -74,11 +74,15 @@ docs/                 conventions.md, protocol.md, configuration.md, deploy/, ru
 Dockerfile · docker-compose.yml
 ```
 
-## Deploy
+## Deploy & use
+
+**→ [docs/usage.md](docs/usage.md) is the complete end-to-end guide** — deploy the hub, install the
+channel plugin, attach sessions as named agents, and use DMs / groups / agent↔agent coordination.
 
 One always-on hub; the **same image runs everywhere** — only the environment differs
 ([docs/configuration.md](docs/configuration.md)).
 
+- **Full walkthrough** — [docs/usage.md](docs/usage.md)
 - **Docker / Compose** — `cp packages/hub/.env.example .env`, edit it, then `docker compose up -d`.
 - **Azure Container Instances** — [docs/deploy/azure-container-instances.md](docs/deploy/azure-container-instances.md)
 - **systemd (co-located)** — [deploy/systemd/claude-telegram-hub.service](deploy/systemd/claude-telegram-hub.service)
