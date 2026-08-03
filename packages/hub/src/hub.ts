@@ -1,6 +1,6 @@
+import { offlineTargetNotice } from "@claude-telegram-hub/protocol";
 import type {
   HubConfig,
-  InboundFrame,
   InboundMessage,
   OutboundMessage,
   ReplyFrame,
@@ -21,12 +21,13 @@ export interface HubDeps {
  * The always-on hub core. Owns the agent registry and the session server, and
  * wires the (single) transport adapter to routing:
  *
- *   adapter inbound → allowlist → deliver to explicitly-mentioned agents
- *   session reply   → adapter.send back to the originating room
+ *   adapter inbound → allowlist → deliver to every explicitly-mentioned agent
+ *   session reply   → post a human-visible copy to the room, and re-inject the
+ *                     hop into any tagged peer agents (agent↔agent)
+ *   tagged but offline → an in-room notice, never a silent drop
  *
- * Adapter-agnostic: it knows only the `TransportAdapter` interface. Group
- * routing, agent↔agent re-injection, and the loop governor arrive in later
- * stages; this stage does explicit-mention delivery for one adapter.
+ * Adapter-agnostic: it knows only the `TransportAdapter` interface. The loop
+ * governor that bounds agent↔agent chains arrives in Stage 5.
  */
 export class Hub {
   private readonly registry = new AgentRegistry();
@@ -87,21 +88,12 @@ export class Hub {
       return;
     }
 
-    for (const agent of message.mentions) {
-      const session = this.registry.get(agent);
-      if (!session) {
-        // Offline-target reporting to the room lands in Stage 4; log for now.
-        this.deps.logger("info", "tagged agent has no live session", { agent });
-        continue;
-      }
-      const frame: InboundFrame = { type: "inbound", message };
-      session.send(frame);
-      this.deps.logger("debug", "injected inbound", { agent, room: message.room });
-    }
+    await this.routeToMentioned(message);
   }
 
-  /** hub → adapter: a session's reply, delivered back to the originating room. */
+  /** hub → adapter: a session's reply. */
   private onReply(agent: string, reply: ReplyFrame): void {
+    // 1) Post a human-visible copy to the room, attributed to the speaker.
     const out: OutboundMessage = { agent, text: reply.text, kind: "reply" };
     const target: RouteTarget = {
       adapter: this.deps.adapter.name,
@@ -111,6 +103,48 @@ export class Hub {
     void this.deps.adapter.send(target, out).catch((err: unknown) => {
       this.deps.logger("warn", "adapter send failed", { error: String(err) });
     });
-    // Agent→agent re-injection (reply.mentions) is Stage 4.
+
+    // 2) Agent↔agent: re-inject the hop into any tagged peer agents. The
+    // platform never delivers bot→bot, so the hub carries it; the human already
+    // sees the visible copy posted above.
+    if (reply.mentions.length > 0) {
+      const reinjected: InboundMessage = {
+        adapter: this.deps.adapter.name,
+        room: reply.room,
+        fromKind: "agent",
+        fromId: agent,
+        text: reply.text,
+        mentions: reply.mentions,
+      };
+      void this.routeToMentioned(reinjected).catch((err: unknown) => {
+        this.deps.logger("warn", "re-injection failed", { error: String(err) });
+      });
+    }
+  }
+
+  /**
+   * Deliver a message to every agent it mentions: inject into connected
+   * sessions, and post an in-room offline notice for any tagged agent without a
+   * live session. An agent never re-injects into itself (self-tag is skipped).
+   */
+  private async routeToMentioned(message: InboundMessage): Promise<void> {
+    for (const agent of message.mentions) {
+      if (message.fromKind === "agent" && agent === message.fromId) continue;
+      const session = this.registry.get(agent);
+      if (!session) {
+        this.deps.logger("info", "tagged agent has no live session", { agent });
+        await this.deps.adapter.send(
+          { adapter: message.adapter, room: message.room },
+          offlineTargetNotice(agent),
+        );
+        continue;
+      }
+      session.send({ type: "inbound", message });
+      this.deps.logger("debug", "injected inbound", {
+        agent,
+        room: message.room,
+        fromKind: message.fromKind,
+      });
+    }
   }
 }
