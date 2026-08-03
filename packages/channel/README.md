@@ -40,7 +40,9 @@ TELEGRAM_HUB_URL=ws://127.0.0.1:8787 TELEGRAM_HUB_SECRET=… \
 
 The plugin ships:
 - `.claude-plugin/plugin.json` — plugin manifest (`name: telegram-hub`).
-- `.mcp.json` — launches the server as `node ./dist/main.js` over stdio.
+- `.mcp.json` — launches the server as `node ${CLAUDE_PLUGIN_ROOT}/dist/main.js` over stdio.
+  (Claude Code spawns plugin MCP servers with a cwd that isn't the plugin root, so the path must
+  be absolute via `${CLAUDE_PLUGIN_ROOT}`.)
 
 ## Notes / caveats
 

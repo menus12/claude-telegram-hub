@@ -2,7 +2,7 @@
   "mcpServers": {
     "telegram-hub": {
       "command": "node",
-      "args": ["./dist/main.js"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/main.js"]
     }
   }
 }
