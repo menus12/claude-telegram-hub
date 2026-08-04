@@ -37,3 +37,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Channel is self-contained (standalone boot, no node_modules)
+        run: bash scripts/smoke-channel.sh
