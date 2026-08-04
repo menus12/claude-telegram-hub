@@ -32,7 +32,7 @@ A repo-local `.telegram-hub.json` accepts the same keys in camelCase (`hubUrl`, 
 ## Build & attach (development)
 
 ```sh
-npm run build -w @claude-telegram-hub/channel        # emits dist/main.js
+npm run build -w @claude-telegram-hub/channel        # esbuild → self-contained dist/main.cjs
 # point Claude Code at this plugin directory and activate the channel:
 TELEGRAM_HUB_URL=ws://127.0.0.1:8787 TELEGRAM_HUB_SECRET=… \
   claude --plugin-dir packages/channel --channels plugin:telegram-hub
@@ -40,9 +40,11 @@ TELEGRAM_HUB_URL=ws://127.0.0.1:8787 TELEGRAM_HUB_SECRET=… \
 
 The plugin ships:
 - `.claude-plugin/plugin.json` — plugin manifest (`name: telegram-hub`).
-- `.mcp.json` — launches the server as `node ${CLAUDE_PLUGIN_ROOT}/dist/main.js` over stdio.
+- `.mcp.json` — launches the server as `node ${CLAUDE_PLUGIN_ROOT}/dist/main.cjs` over stdio.
   (Claude Code spawns plugin MCP servers with a cwd that isn't the plugin root, so the path must
-  be absolute via `${CLAUDE_PLUGIN_ROOT}`.)
+  be absolute via `${CLAUDE_PLUGIN_ROOT}`.) `dist/main.cjs` is a **self-contained esbuild bundle**
+  (MCP SDK, `ws`, and `@claude-telegram-hub/protocol` inlined) — the installed plugin needs no
+  `node_modules`.
 
 ## Notes / caveats
 

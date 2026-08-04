@@ -43,15 +43,33 @@ jobs:
       - run: npm ci
       - run: npm run build -w @claude-telegram-hub/channel
 
-      - name: Pack and verify tarball contents
+      - name: Pack and smoke-test the standalone channel
         run: |
           npm pack -w @claude-telegram-hub/channel
           tgz=$(ls claude-telegram-hub-channel-*.tgz)
           echo "packed $tgz"
-          tar -tzf "$tgz" > files.txt
-          grep -q 'package/dist/main.js' files.txt
-          grep -q 'package/.mcp.json' files.txt
-          grep -q 'package/.claude-plugin/plugin.json' files.txt
+
+          # Unpack into a clean dir with NO workspace and NO node_modules — the
+          # exact scenario a real install faces.
+          workdir=$(mktemp -d)
+          tar -xzf "$tgz" -C "$workdir"
+          test -f "$workdir/package/dist/main.cjs"
+          test -f "$workdir/package/.mcp.json"
+          test -f "$workdir/package/.claude-plugin/plugin.json"
+          test ! -d "$workdir/package/node_modules"
+
+          # It must boot self-contained (not ERR_MODULE_NOT_FOUND / dynamic require).
+          cd "$workdir/package"
+          set +e
+          TELEGRAM_HUB_URL=ws://127.0.0.1:59999 TELEGRAM_HUB_SECRET=x TELEGRAM_HUB_AGENT=ci \
+            timeout 4 node dist/main.cjs >out.log 2>err.log
+          set -e
+          echo "--- channel stderr ---"; cat err.log
+          if grep -qiE "ERR_MODULE_NOT_FOUND|Dynamic require|SyntaxError" err.log; then
+            echo "FAIL: channel bundle is not self-contained"; exit 1
+          fi
+          grep -q '"msg":"channel started"' err.log || { echo "FAIL: channel did not boot"; exit 1; }
+          echo "PASS: channel boots standalone with no node_modules"
 
   # Publish the hub image to GHCR on a version tag (not on workflow_dispatch).
   # The package is public, so consumers (e.g. Azure Container Apps) pull it
