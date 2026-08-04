@@ -2,8 +2,15 @@ import { renderOutbound } from "@claude-telegram-hub/protocol";
 import type { OutboundMessage, RouteTarget } from "@claude-telegram-hub/protocol";
 import type { Inbox, TransportAdapter } from "../../adapter.js";
 import type { Logger } from "../../logger.js";
+import { toTelegramMarkdown } from "./format.js";
 import { toInboundMessage } from "./normalize.js";
-import type { TelegramApi, TgMessage } from "./types.js";
+import type { SendOptions, TelegramApi, TgMessage } from "./types.js";
+
+/** True when a Telegram error is a MarkdownV2 entity-parse failure. */
+function isParseError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /can't parse entities|parse entities|character.*must be escaped/i.test(msg);
+}
 
 export interface TelegramAdapterOptions {
   api: TelegramApi;
@@ -31,12 +38,24 @@ export class TelegramAdapter implements TransportAdapter {
   }
 
   async send(target: RouteTarget, out: OutboundMessage): Promise<void> {
-    const text = renderOutbound(out);
-    await this.opts.api.sendMessage(
-      target.room,
-      text,
-      target.replyToId ? { replyToMessageId: Number(target.replyToId) } : undefined,
-    );
+    const base: SendOptions = target.replyToId
+      ? { replyToMessageId: Number(target.replyToId) }
+      : {};
+    try {
+      // Render agent markdown as Telegram MarkdownV2 so bold/code/lists/links show.
+      await this.opts.api.sendMessage(target.room, toTelegramMarkdown(out), {
+        ...base,
+        parseMode: "MarkdownV2",
+      });
+    } catch (err) {
+      if (!isParseError(err)) throw err;
+      // Telegram rejected the entities — deliver the message as plain text rather
+      // than dropping it.
+      this.opts.logger?.("warn", "telegram markdown parse failed; sending plain", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await this.opts.api.sendMessage(target.room, renderOutbound(out), base);
+    }
   }
 
   async stop(): Promise<void> {

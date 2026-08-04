@@ -15,6 +15,12 @@ export class FakeTelegramApi implements TelegramApi {
   readonly sent: SentText[] = [];
   started = false;
   private handler: ((msg: TgMessage) => void) | undefined;
+  private readonly pendingErrors: Error[] = [];
+
+  /** Make the next sendMessage reject with `err` (once). */
+  failNext(err: Error): void {
+    this.pendingErrors.push(err);
+  }
 
   onMessage(handler: (msg: TgMessage) => void): void {
     this.handler = handler;
@@ -31,6 +37,8 @@ export class FakeTelegramApi implements TelegramApi {
   }
 
   sendMessage(chatId: string, text: string, opts?: SendOptions): Promise<void> {
+    const err = this.pendingErrors.shift();
+    if (err) return Promise.reject(err);
     this.sent.push({ chatId, text, opts });
     return Promise.resolve();
   }

@@ -16,6 +16,8 @@ export interface TgMessage {
 
 export interface SendOptions {
   replyToMessageId?: number;
+  /** Telegram parse mode for the text (e.g. "MarkdownV2"); omit for plain text. */
+  parseMode?: "MarkdownV2" | "HTML" | "Markdown";
 }
 
 /** The transport primitives the adapter drives; grammY implements these. */
