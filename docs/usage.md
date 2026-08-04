@@ -134,7 +134,7 @@ Day-to-day operations (start/stop, health, secret rotation, adding agents, proto
 | Session registers, but messages don't appear as `<channel>` turns | Channel not **activated** — launch with `--dangerously-load-development-channels plugin:telegram-hub@claude-telegram-hub`. |
 | `claude plugin list` → *failed to load: cache-miss* | The marketplace path lost its `.claude-plugin/marketplace.json`. Ensure it exists at the repo path, then `claude plugin marketplace update claude-telegram-hub`. |
 | `/mcp` doesn't list `telegram-hub` | The plugin isn't loaded — confirm it's installed + enabled and start a **fresh** session (plugins load at startup). |
-| MCP server errors on start | Config missing (`hubUrl`/`sessionSecret`) or `dist/` not built. The plugin runs `${CLAUDE_PLUGIN_ROOT}/dist/main.js`. |
+| MCP server errors on start | Config missing (`hubUrl`/`sessionSecret`) or `dist/` not built. The plugin runs `${CLAUDE_PLUGIN_ROOT}/dist/main.cjs`. |
 | Two sessions fight over one agent name | Give each a distinct `TELEGRAM_HUB_AGENT`; don't pin `agent` in the machine config. |
 | Bot silent / flaky in a group | Bot isn't a group admin (privacy mode on), or **more than one poller** is on the token. Exactly one hub per token. |
 | Sender ignored | Their numeric id isn't in `HUB_ALLOWLIST`. |

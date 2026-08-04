@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "description": "Thin Claude Code channel: injects hub messages into a session and relays replies back through the hub",
   "type": "module",
-  "main": "./dist/main.js",
+  "main": "./dist/main.cjs",
   "bin": {
-    "claude-telegram-channel": "./dist/main.js"
+    "claude-telegram-channel": "./dist/main.cjs"
   },
   "files": [
     "dist",
@@ -13,15 +13,13 @@
     ".mcp.json"
   ],
   "scripts": {
-    "build": "tsc -b tsconfig.build.json",
-    "clean": "tsc -b tsconfig.build.json --clean"
-  },
-  "dependencies": {
-    "@claude-telegram-hub/protocol": "*",
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "ws": "^8.18.0"
+    "build": "node build.mjs",
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "@types/ws": "^8.5.12"
+    "@claude-telegram-hub/protocol": "*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/ws": "^8.5.12",
+    "ws": "^8.18.0"
   }
 }

@@ -96,7 +96,7 @@ gitignored by this repo's `.gitignore`.
   polls nothing.
 - `--channels` marketplace resolution is a Claude Code feature still stabilizing; `--plugin-dir`
   is the reliable path for local/self-hosted installs today.
-- The plugin's `.mcp.json` launches the server via `${CLAUDE_PLUGIN_ROOT}/dist/main.js` — Claude
+- The plugin's `.mcp.json` launches the server via `${CLAUDE_PLUGIN_ROOT}/dist/main.cjs` — Claude
   Code spawns plugin MCP servers with a cwd that is **not** the plugin root, so a relative path
   would fail to resolve.
 

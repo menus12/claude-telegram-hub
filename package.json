@@ -15,12 +15,13 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc -b tsconfig.build.json",
-    "clean": "tsc -b tsconfig.build.json --clean"
+    "build": "tsc -b tsconfig.build.json && npm run build -w @claude-telegram-hub/channel",
+    "clean": "tsc -b tsconfig.build.json --clean && npm run clean -w @claude-telegram-hub/channel"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "@types/node": "^20.16.11",
+    "esbuild": "^0.21.5",
     "eslint": "^9.13.0",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.9.0",

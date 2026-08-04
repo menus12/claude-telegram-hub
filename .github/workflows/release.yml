@@ -43,15 +43,8 @@ jobs:
       - run: npm ci
       - run: npm run build -w @claude-telegram-hub/channel
 
-      - name: Pack and verify tarball contents
-        run: |
-          npm pack -w @claude-telegram-hub/channel
-          tgz=$(ls claude-telegram-hub-channel-*.tgz)
-          echo "packed $tgz"
-          tar -tzf "$tgz" > files.txt
-          grep -q 'package/dist/main.js' files.txt
-          grep -q 'package/.mcp.json' files.txt
-          grep -q 'package/.claude-plugin/plugin.json' files.txt
+      - name: Pack and smoke-test the standalone channel
+        run: bash scripts/smoke-channel.sh
 
   # Publish the hub image to GHCR on a version tag (not on workflow_dispatch).
   # The package is public, so consumers (e.g. Azure Container Apps) pull it
