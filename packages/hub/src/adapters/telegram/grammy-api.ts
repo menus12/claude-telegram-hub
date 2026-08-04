@@ -46,13 +46,12 @@ export class GrammyApi implements TelegramApi {
   }
 
   async sendMessage(chatId: string, text: string, opts?: SendOptions): Promise<void> {
-    await this.bot.api.sendMessage(
-      chatId,
-      text,
-      opts?.replyToMessageId
+    await this.bot.api.sendMessage(chatId, text, {
+      ...(opts?.parseMode ? { parse_mode: opts.parseMode } : {}),
+      ...(opts?.replyToMessageId
         ? { reply_parameters: { message_id: opts.replyToMessageId } }
-        : undefined,
-    );
+        : {}),
+    });
   }
 
   async stop(): Promise<void> {

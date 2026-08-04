@@ -86,7 +86,8 @@ describe("Telegram ↔ hub ↔ channel (mocked Bot API)", () => {
     a.client.sendReply({ room, text: "on it" });
     await waitFor(() => api.sent.length >= 1);
     expect(api.sent[0].chatId).toBe("555");
-    expect(api.sent[0].text).toBe("re-infra ▸ on it");
+    expect(api.sent[0].text).toContain("on it"); // MarkdownV2, attributed
+    expect(api.sent[0].opts?.parseMode).toBe("MarkdownV2");
   });
 
   it("drops a DM from a non-allowlisted user", async () => {

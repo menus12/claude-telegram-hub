@@ -48,7 +48,7 @@ describe("TelegramAdapter", () => {
     expect(received).toHaveLength(0);
   });
 
-  it("renders outbound with attribution and a reply target", async () => {
+  it("renders a reply as MarkdownV2 with the bold agent prefix + reply target", async () => {
     const api = new FakeTelegramApi();
     const adapter = new TelegramAdapter({ api, tagSigil: "@" });
     await adapter.send(
@@ -57,19 +57,62 @@ describe("TelegramAdapter", () => {
     );
     expect(api.sent[0]).toEqual({
       chatId: "555",
-      text: "re-infra ▸ done",
-      opts: { replyToMessageId: 7 },
+      text: "*re\\-infra* ▸ done\n", // agent bold, hyphen escaped for MarkdownV2
+      opts: { replyToMessageId: 7, parseMode: "MarkdownV2" },
     });
   });
 
-  it("sends a hub notice verbatim, without attribution", async () => {
+  it("converts CommonMark (bold / code / lists) to MarkdownV2", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.send(
+      { adapter: "telegram", room: "r" },
+      { agent: "re-infra", text: "some **bold**, `code`, and\n- a\n- b", kind: "reply" },
+    );
+    const sent = api.sent[0];
+    expect(sent.opts?.parseMode).toBe("MarkdownV2");
+    expect(sent.text).toContain("*bold*"); // ** -> *
+    expect(sent.text).toContain("`code`");
+    expect(sent.text).toContain("•   a"); // list item -> bullet
+  });
+
+  it("sends a hub notice as MarkdownV2, without attribution", async () => {
     const api = new FakeTelegramApi();
     const adapter = new TelegramAdapter({ api, tagSigil: "@" });
     await adapter.send(
       { adapter: "telegram", room: "555" },
       { agent: "hub", text: "paused", kind: "notice" },
     );
-    expect(api.sent[0]).toEqual({ chatId: "555", text: "paused", opts: undefined });
+    expect(api.sent[0]).toEqual({
+      chatId: "555",
+      text: "paused\n",
+      opts: { parseMode: "MarkdownV2" },
+    });
+  });
+
+  it("falls back to plain text when Telegram rejects the entities", async () => {
+    const api = new FakeTelegramApi();
+    api.failNext(new Error("Bad Request: can't parse entities in message"));
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.send(
+      { adapter: "telegram", room: "555", replyToId: "7" },
+      { agent: "re-infra", text: "**x**", kind: "reply" },
+    );
+    // one delivery: the plain-text retry (attributed, no parse mode)
+    expect(api.sent).toHaveLength(1);
+    expect(api.sent[0].text).toBe("re-infra ▸ **x**");
+    expect(api.sent[0].opts?.parseMode).toBeUndefined();
+    expect(api.sent[0].opts?.replyToMessageId).toBe(7);
+  });
+
+  it("propagates non-parse send errors (no plain retry)", async () => {
+    const api = new FakeTelegramApi();
+    api.failNext(new Error("Bad Request: chat not found"));
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await expect(
+      adapter.send({ adapter: "telegram", room: "x" }, { agent: "a", text: "hi", kind: "reply" }),
+    ).rejects.toThrow(/chat not found/);
+    expect(api.sent).toHaveLength(0);
   });
 
   it("stops the underlying api", async () => {
