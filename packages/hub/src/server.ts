@@ -26,6 +26,20 @@ export interface SessionServerOptions {
   onRegister?: (agent: string) => void;
   /** A session for `agent` just detached (fired after the registry is updated). */
   onDetach?: (agent: string) => void;
+  /**
+   * A newcomer was rejected because `agent` is already held by a live session
+   * (only in `reject` policy). The hub surfaces this in the room.
+   */
+  onDuplicateRejected?: (agent: string) => void;
+  /**
+   * Policy when a name is already registered: `reject` keeps the incumbent (if it's
+   * still live) and turns the newcomer away; `replace` takes over. Default `reject`.
+   */
+  duplicateName?: "reject" | "replace";
+  /** Liveness probe for the incumbent on a name collision (injectable for tests). */
+  probeAlive?: (session: Session) => Promise<boolean>;
+  /** Timeout for the default ping-based liveness probe. */
+  probeTimeoutMs?: number;
   /** Readiness probe backing GET /readyz. */
   isReady: () => boolean;
   logger: Logger;
@@ -96,6 +110,7 @@ export class SessionServer {
 
   private onConnection(ws: WebSocket): void {
     let session: Session | undefined;
+    let registering = false;
 
     const registerTimer = setTimeout(() => {
       if (!session) {
@@ -122,8 +137,13 @@ export class SessionServer {
 
       if (!session) {
         if (frame.type !== "register") return; // ignore until registered
+        if (registering) return; // a registration is already in flight (probe running)
+        registering = true;
         clearTimeout(registerTimer);
-        session = this.handleRegister(ws, frame);
+        void this.handleRegister(ws, frame).then((s) => {
+          session = s;
+          registering = false;
+        });
         return;
       }
 
@@ -154,7 +174,10 @@ export class SessionServer {
     });
   }
 
-  private handleRegister(ws: WebSocket, frame: RegisterFrame): Session | undefined {
+  private async handleRegister(
+    ws: WebSocket,
+    frame: RegisterFrame,
+  ): Promise<Session | undefined> {
     if (!isProtocolCompatible(frame.protocolVersion)) {
       this.sendFrame(ws, {
         type: "error",
@@ -177,6 +200,35 @@ export class SessionServer {
       return undefined;
     }
 
+    // Duplicate-name guard (default `reject`): if a session already holds this name
+    // and is still live, keep it and turn the newcomer away — no split-brain. A
+    // dead/half-open incumbent (a restart's old socket) fails the probe and is
+    // taken over below, so a genuine reconnect still attaches.
+    const incumbent = this.opts.registry.get(frame.agent);
+    if (incumbent && (this.opts.duplicateName ?? "reject") === "reject") {
+      const alive = await this.probeAlive(incumbent);
+      if (alive) {
+        this.opts.logger("warn", "rejected duplicate registration; name in use", {
+          agent: frame.agent,
+        });
+        this.sendFrame(ws, {
+          type: "error",
+          code: "name_in_use",
+          message: `agent "${frame.agent}" is already connected`,
+          fatal: true,
+        });
+        ws.close();
+        this.opts.onDuplicateRejected?.(frame.agent);
+        return undefined;
+      }
+      this.opts.logger("info", "incumbent session is dead; taking over name", {
+        agent: frame.agent,
+      });
+    }
+
+    // The newcomer's own socket may have dropped during the probe.
+    if (ws.readyState !== WebSocket.OPEN) return undefined;
+
     const session = new Session(frame.agent, ws);
     const displaced = this.opts.registry.register(session);
     if (displaced) {
@@ -191,6 +243,13 @@ export class SessionServer {
     this.opts.logger("info", "session registered", { agent: frame.agent });
     this.opts.onRegister?.(frame.agent);
     return session;
+  }
+
+  /** Liveness probe for a name-collision incumbent (ping/pong, or an injected fake). */
+  private probeAlive(session: Session): Promise<boolean> {
+    return this.opts.probeAlive
+      ? this.opts.probeAlive(session)
+      : session.isAlive(this.opts.probeTimeoutMs ?? 1500);
   }
 
   private sendFrame(ws: WebSocket, frame: HubToSessionFrame): void {

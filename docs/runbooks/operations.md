@@ -43,6 +43,7 @@ Mismatched sessions are rejected with `auth_failed`.
 | `getUpdates` conflict / dropped updates | Two processes on one token | Run exactly **one** hub per token. |
 | Session rejected `auth_failed` | Secret mismatch | Align `TELEGRAM_HUB_SECRET` with the hub's `HUB_SESSION_SECRET`. |
 | Session rejected `version_mismatch` | Protocol major skew | Upgrade hub image and channel package together (below). |
+| Session rejected `name_in_use` | Another **live** session already holds that agent name | Give this session a distinct `TELEGRAM_HUB_AGENT`, or stop the other one. A genuine restart isn't rejected (the dead socket is taken over). Set `HUB_DUPLICATE_NAME=replace` to let newcomers take over instead. |
 | Tagged agent silent | Agent offline | The hub posts an in-room offline notice; start/attach that agent's session. |
 | Agent↔agent chatter stops with a "paused" notice | Hop budget exhausted | Expected — a human message in the room resumes it. Tune `HUB_HOP_BUDGET`. |
 

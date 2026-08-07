@@ -49,7 +49,8 @@ frame; the hub calls `isProtocolCompatible(peer)` and requires an **exact major 
 | `error` | A frame/connection was rejected | `code`, `message`, `fatal` (default `false`) |
 
 `error.code` is one of: `version_mismatch`, `auth_failed`, `unknown_agent`, `not_allowlisted`,
-`bad_request`.
+`bad_request`, `name_in_use` (a live session already holds the requested agent name; the newcomer
+is rejected — `fatal` — under the default `reject` policy).
 
 ## Message shapes
 
