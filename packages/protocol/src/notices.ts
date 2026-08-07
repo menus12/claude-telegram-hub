@@ -1,12 +1,29 @@
 import type { OutboundMessage } from "./messages.js";
 
+/** Separator between the speaking agent's name and its message text. */
+export const ATTRIBUTION_SEPARATOR = " ▸ ";
+
 /**
  * Attribution prefix for an agent's message. One bot posts everything in a
  * shared room, so each outbound is prefixed with the speaking agent's name to
  * keep the transcript legible (e.g. `re-infra ▸ …`).
  */
 export function attributionPrefix(agent: string): string {
-  return `${agent} ▸ `;
+  return `${agent}${ATTRIBUTION_SEPARATOR}`;
+}
+
+/**
+ * Inverse of {@link attributionPrefix}: recover the speaking agent's name from an
+ * attributed message's **visible text** (e.g. a Telegram `reply_to_message.text`).
+ * Returns `undefined` when the text isn't agent-attributed — notably hub notices,
+ * which are posted verbatim without a prefix. This lets a reply-to-a-message be
+ * routed to its author *without* any per-process index, so it survives a restart.
+ */
+export function parseAttribution(text: string): string | undefined {
+  const idx = text.indexOf(ATTRIBUTION_SEPARATOR);
+  if (idx <= 0) return undefined;
+  const name = text.slice(0, idx);
+  return /^[A-Za-z0-9_-]+$/.test(name) ? name : undefined;
 }
 
 /**

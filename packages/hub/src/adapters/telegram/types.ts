@@ -31,11 +31,12 @@ export interface TgMessage {
   /** A photo or document attached to the message, normalized. */
   attachment?: TgAttachment;
   /**
-   * The message this one replies to, if any. Only its `message_id` matters here:
-   * the bot sends everything, so `reply_to_message.from` is always the bot and
-   * can't identify the agent — the adapter's own message_id→agent index does.
+   * The message this one replies to, if any. The bot sends everything, so
+   * `reply_to_message.from` is always the bot and can't identify the agent; the
+   * agent is recovered from the adapter's message-id index (fast path) or, so it
+   * survives a restart, from the attributed `text` (`agent ▸ …`).
    */
-  reply_to_message?: { message_id: number };
+  reply_to_message?: { message_id: number; text?: string };
 }
 
 export interface SendOptions {

@@ -147,6 +147,48 @@ describe("TelegramAdapter", () => {
     expect(received[0].mentions).toEqual(["re-infra"]);
   });
 
+  it("routes a reply via the attribution prefix when the index misses (survives restart)", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    const received: InboundMessage[] = [];
+    await adapter.start((m) => {
+      received.push(m);
+      return Promise.resolve();
+    });
+
+    // Nothing recorded (as after a hub restart). The replied-to message's visible
+    // text carries the `agent ▸ …` attribution, which identifies the author.
+    api.push({
+      message_id: 30,
+      chat: { id: -100999, type: "supergroup" },
+      from: { id: 42, is_bot: false },
+      text: "roll it back",
+      reply_to_message: { message_id: 5, text: "re-infra ▸ deployed to prod" },
+    });
+    await delay(0);
+    expect(received).toHaveLength(1);
+    expect(received[0].mentions).toEqual(["re-infra"]);
+  });
+
+  it("does not resolve a reply to an unattributed message (e.g. a hub notice)", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    const received: InboundMessage[] = [];
+    await adapter.start((m) => {
+      received.push(m);
+      return Promise.resolve();
+    });
+    api.push({
+      message_id: 31,
+      chat: { id: -100999, type: "supergroup" },
+      from: { id: 42, is_bot: false },
+      text: "replying to a notice",
+      reply_to_message: { message_id: 6, text: "@re-infra is online." },
+    });
+    await delay(0);
+    expect(received[0].mentions).toEqual([]);
+  });
+
   it("does not index hub notices (a reply to one resolves to nobody)", async () => {
     const api = new FakeTelegramApi();
     const adapter = new TelegramAdapter({ api, tagSigil: "@" });

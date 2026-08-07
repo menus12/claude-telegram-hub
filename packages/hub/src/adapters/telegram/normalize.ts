@@ -2,12 +2,20 @@ import type { InboundMessage } from "@claude-telegram-hub/protocol";
 import { parseMentions } from "./mentions.js";
 import type { TgMessage } from "./types.js";
 
+/** The replied-to message, as much as routing needs to identify its author. */
+export interface ReplyContext {
+  room: string;
+  messageId: number;
+  /** Visible text of the replied-to message (carries the `agent ▸ …` prefix). */
+  text?: string;
+}
+
 /**
  * Resolves an inbound reply's target message to the agent that authored it, so a
  * Telegram *reply* can address an agent without an `@tag`. Returns `undefined`
- * when the replied-to message wasn't an agent's (or is unknown/expired).
+ * when the replied-to message wasn't an agent's.
  */
-export type ReplyTargetResolver = (room: string, replyToMessageId: number) => string | undefined;
+export type ReplyTargetResolver = (reply: ReplyContext) => string | undefined;
 
 /**
  * Normalize a Telegram message into the transport-agnostic `InboundMessage`,
@@ -32,9 +40,13 @@ export function toInboundMessage(
   if (text === "" && !msg.attachment) return null;
   const room = String(msg.chat.id);
   const mentions = parseMentions(text, sigil);
-  const replyToId = msg.reply_to_message?.message_id;
-  if (replyToId !== undefined && resolveReplyTarget) {
-    const agent = resolveReplyTarget(room, replyToId);
+  const repliedTo = msg.reply_to_message;
+  if (repliedTo && resolveReplyTarget) {
+    const agent = resolveReplyTarget({
+      room,
+      messageId: repliedTo.message_id,
+      ...(repliedTo.text !== undefined ? { text: repliedTo.text } : {}),
+    });
     if (agent && !mentions.includes(agent)) mentions.push(agent);
   }
   return {

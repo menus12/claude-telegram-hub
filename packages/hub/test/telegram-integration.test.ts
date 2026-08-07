@@ -153,4 +153,23 @@ describe("Telegram ↔ hub ↔ channel (mocked Bot API)", () => {
     expect(gitops.injected).toHaveLength(1);
     expect(infra.injected).toHaveLength(0);
   });
+
+  it("routes a reply via attribution when the message predates this process (restart)", async () => {
+    const { api, url } = await startHub();
+    const a = attach(url, "re-infra");
+    await waitFor(a.registered);
+
+    // No agent send happened in this process (as after a restart), so the index is
+    // empty. The replied-to message's attributed text identifies the author.
+    api.push({
+      message_id: 40,
+      chat: { id: 555, type: "private" },
+      from: { id: 42, is_bot: false },
+      text: "any update?",
+      reply_to_message: { message_id: 12, text: "re-infra ▸ working on it" },
+    });
+    await waitFor(() => a.injected.length >= 1);
+    expect(a.injected[0].message.text).toBe("any update?");
+    expect(a.injected[0].message.mentions).toContain("re-infra");
+  });
 });

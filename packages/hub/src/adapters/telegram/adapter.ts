@@ -1,4 +1,4 @@
-import { attributionPrefix, renderOutbound } from "@claude-telegram-hub/protocol";
+import { attributionPrefix, parseAttribution, renderOutbound } from "@claude-telegram-hub/protocol";
 import type {
   FilePayload,
   InboundMessage,
@@ -110,8 +110,12 @@ export class TelegramAdapter implements TransportAdapter {
   }
 
   private handle(msg: TgMessage): void {
-    const message = toInboundMessage(msg, this.opts.tagSigil, (room, id) =>
-      this.replies.resolve(room, id),
+    const message = toInboundMessage(msg, this.opts.tagSigil, (reply) =>
+      // Fast path: the message-id index (this process). Fallback: the author's
+      // `agent ▸ …` attribution in the replied-to text, which needs no index and
+      // so survives a hub restart / index eviction.
+      this.replies.resolve(reply.room, reply.messageId) ??
+      (reply.text !== undefined ? parseAttribution(reply.text) : undefined),
     );
     if (!message) return;
     const inbox = this.inbox;

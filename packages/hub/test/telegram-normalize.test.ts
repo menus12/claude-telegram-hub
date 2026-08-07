@@ -80,10 +80,25 @@ describe("toInboundMessage", () => {
       text: "ship it",
       reply_to_message: { message_id: 7 },
     };
-    const m = toInboundMessage(reply, "@", (room, id) =>
-      room === "-100123" && id === 7 ? "re-infra" : undefined,
+    const m = toInboundMessage(reply, "@", (r) =>
+      r.room === "-100123" && r.messageId === 7 ? "re-infra" : undefined,
     );
     expect(m?.mentions).toEqual(["re-infra"]);
+  });
+
+  it("passes the replied-to text to the resolver (for stateless attribution)", () => {
+    const reply: TgMessage = {
+      ...base,
+      text: "and the db?",
+      reply_to_message: { message_id: 7, text: "re-infra ▸ all green" },
+    };
+    const seen: string[] = [];
+    const m = toInboundMessage(reply, "@", (r) => {
+      if (r.text) seen.push(r.text);
+      return undefined;
+    });
+    expect(seen).toEqual(["re-infra ▸ all green"]);
+    expect(m?.mentions).toEqual([]);
   });
 
   it("composes a reply target with an explicit @tag, de-duplicating", () => {
