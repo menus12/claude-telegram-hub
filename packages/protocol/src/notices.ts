@@ -100,6 +100,54 @@ export function duplicateRegistrationNotice(agent: string): OutboundMessage {
   };
 }
 
+function quoteTranscript(text: string, max = 200): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/**
+ * The transcript echo for a voice note: shows *who it was routed to* and *what was
+ * heard*, so the operator can catch a mis-hear or mis-address before agents act.
+ * A colleague-style paraphrase — one line, governor-neutral.
+ */
+export function transcriptEchoNotice(recipients: string[], transcript: string): OutboundMessage {
+  const to = recipients.map((r) => `@${r}`).join(", ");
+  return {
+    agent: "hub",
+    kind: "notice",
+    text: `🎙️ heard → ${to}: "${quoteTranscript(transcript)}"`,
+  };
+}
+
+/** A voice note arrived but nobody could be resolved as its recipient. */
+export function voiceUnaddressedNotice(): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text:
+      "🎙️ heard a voice note but couldn't tell who it's for — reply to an agent's " +
+      "message, or start with their name (or “everyone”).",
+  };
+}
+
+/** A voice note couldn't be transcribed (silence, noise, or a fetch failure). */
+export function voiceUnclearNotice(): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text: "🎙️ couldn't make out that voice note — try again or type it.",
+  };
+}
+
+/** A voice note arrived but transcription isn't configured for this deployment. */
+export function voiceDisabledNotice(): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text: "🎙️ voice messages aren't enabled here — please type it.",
+  };
+}
+
 /**
  * The in-room notice posted when a coordination thread's hop budget is exhausted
  * and the hub freezes agent→agent routing. A human message resumes the thread.

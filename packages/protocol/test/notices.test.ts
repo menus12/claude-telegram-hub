@@ -9,6 +9,7 @@ import {
   presenceOfflineNotice,
   slaEscalationNotice,
   duplicateRegistrationNotice,
+  transcriptEchoNotice,
 } from "../src/index.js";
 
 describe("attribution", () => {
@@ -67,5 +68,14 @@ describe("hub notices", () => {
     const n = duplicateRegistrationNotice("re-infra");
     expect(n).toMatchObject({ agent: "hub", kind: "notice" });
     expect(n.text).toContain("@re-infra");
+  });
+
+  it("builds a transcript echo with recipients and the (truncated) transcript", () => {
+    const n = transcriptEchoNotice(["platform", "re-infra"], "  redeploy   the service  ");
+    expect(n).toMatchObject({ agent: "hub", kind: "notice" });
+    expect(n.text).toContain("@platform, @re-infra");
+    expect(n.text).toContain('"redeploy the service"'); // whitespace collapsed
+    // long transcripts are truncated with an ellipsis
+    expect(transcriptEchoNotice(["a"], "x".repeat(500)).text).toContain("…");
   });
 });

@@ -136,6 +136,8 @@ export const hubConfigSchema = z.object({
   sttModel: z.string().min(1).default("small"),
   /** STT language: `auto` (detect) or an ISO code such as `ru` / `en`. */
   sttLang: z.string().min(1).default("auto"),
+  /** Echo a voice note's transcript (and resolved recipients) into the room. */
+  voiceEcho: z.boolean().default(true),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -171,6 +173,7 @@ export const HUB_ENV = {
   sttUrl: "HUB_STT_URL",
   sttModel: "HUB_STT_MODEL",
   sttLang: "HUB_STT_LANG",
+  voiceEcho: "HUB_VOICE_ECHO",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -200,6 +203,7 @@ export function loadHubConfig(env: Env): HubConfig {
       sttUrl: env[HUB_ENV.sttUrl],
       sttModel: env[HUB_ENV.sttModel],
       sttLang: env[HUB_ENV.sttLang],
+      voiceEcho: bool(env[HUB_ENV.voiceEcho]),
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),
