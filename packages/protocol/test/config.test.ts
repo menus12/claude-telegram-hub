@@ -25,6 +25,9 @@ describe("loadHubConfig", () => {
     expect(cfg.admins).toEqual([]);
     expect(cfg.stateFile).toBeUndefined();
     expect(cfg.pairing).toBe(false);
+    expect(cfg.sttUrl).toBeUndefined();
+    expect(cfg.sttModel).toBe("small");
+    expect(cfg.sttLang).toBe("auto");
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
@@ -67,6 +70,19 @@ describe("loadHubConfig", () => {
     expect(() =>
       loadHubConfig({ ...minimal, HUB_ACK_SLA: "300000", HUB_ANSWER_SLA: "120000" }),
     ).toThrow(/answerSlaMs/);
+  });
+
+  it("reads the STT knobs and validates the URL", () => {
+    const cfg = loadHubConfig({
+      ...minimal,
+      HUB_STT_URL: "http://stt:8000",
+      HUB_STT_MODEL: "medium",
+      HUB_STT_LANG: "ru",
+    });
+    expect(cfg.sttUrl).toBe("http://stt:8000");
+    expect(cfg.sttModel).toBe("medium");
+    expect(cfg.sttLang).toBe("ru");
+    expect(() => loadHubConfig({ ...minimal, HUB_STT_URL: "not-a-url" })).toThrow(/sttUrl/);
   });
 
   it("reads the admin/state/pairing knobs", () => {

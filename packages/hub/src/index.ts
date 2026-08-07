@@ -14,5 +14,12 @@ export { AgentRegistry } from "./registry.js";
 export { Session } from "./session.js";
 export { SessionServer, type SessionServerOptions } from "./server.js";
 export type { TransportAdapter, Inbox } from "./adapter.js";
+export {
+  HttpTranscriptionService,
+  type TranscriptionService,
+  type TranscriptionResult,
+  type AudioInput,
+  type HttpTranscriptionOptions,
+} from "./transcription.js";
 export { LoopbackAdapter, type SentMessage } from "./adapters/loopback.js";
 export { makeLogger, type Logger } from "./logger.js";
