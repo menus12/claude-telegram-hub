@@ -127,6 +127,15 @@ export const hubConfigSchema = z.object({
    * dropping them silently, so access can be granted with `/allow`. Off by default.
    */
   pairing: z.boolean().default(false),
+  /**
+   * Speech-to-text service base URL (OpenAI-compatible, exposes
+   * `POST /v1/audio/transcriptions`). Unset = voice transcription disabled.
+   */
+  sttUrl: z.string().url().optional(),
+  /** STT model name passed to the service (e.g. `small`, `medium`). */
+  sttModel: z.string().min(1).default("small"),
+  /** STT language: `auto` (detect) or an ISO code such as `ru` / `en`. */
+  sttLang: z.string().min(1).default("auto"),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -159,6 +168,9 @@ export const HUB_ENV = {
   admins: "HUB_ADMINS",
   stateFile: "HUB_STATE_FILE",
   pairing: "HUB_PAIRING",
+  sttUrl: "HUB_STT_URL",
+  sttModel: "HUB_STT_MODEL",
+  sttLang: "HUB_STT_LANG",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -185,6 +197,9 @@ export function loadHubConfig(env: Env): HubConfig {
       admins: csv(env[HUB_ENV.admins]),
       stateFile: env[HUB_ENV.stateFile],
       pairing: bool(env[HUB_ENV.pairing]),
+      sttUrl: env[HUB_ENV.sttUrl],
+      sttModel: env[HUB_ENV.sttModel],
+      sttLang: env[HUB_ENV.sttLang],
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),
