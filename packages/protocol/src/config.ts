@@ -100,6 +100,21 @@ export const hubConfigSchema = z.object({
    * incumbent is always taken over regardless, so a genuine restart still attaches.
    */
   duplicateName: z.enum(["reject", "replace"]).default("reject"),
+  /**
+   * Admin user ids permitted to run in-chat allowlist commands (`/allow`, …).
+   * Empty means "fall back to the allowlist seed" (resolved by the hub).
+   */
+  admins: z.array(z.string().min(1)).default([]),
+  /**
+   * Path to a JSON file that persists runtime allowlist changes across restarts.
+   * Unset = in-memory only (changes are lost on restart).
+   */
+  stateFile: z.string().min(1).optional(),
+  /**
+   * Route an unknown sender into a `pending` queue (and notify admins) instead of
+   * dropping them silently, so access can be granted with `/allow`. Off by default.
+   */
+  pairing: z.boolean().default(false),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -127,6 +142,9 @@ export const HUB_ENV = {
   ackSlaMs: "HUB_ACK_SLA",
   answerSlaMs: "HUB_ANSWER_SLA",
   duplicateName: "HUB_DUPLICATE_NAME",
+  admins: "HUB_ADMINS",
+  stateFile: "HUB_STATE_FILE",
+  pairing: "HUB_PAIRING",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -148,6 +166,9 @@ export function loadHubConfig(env: Env): HubConfig {
       ackSlaMs: num(env[HUB_ENV.ackSlaMs]),
       answerSlaMs: num(env[HUB_ENV.answerSlaMs]),
       duplicateName: env[HUB_ENV.duplicateName],
+      admins: csv(env[HUB_ENV.admins]),
+      stateFile: env[HUB_ENV.stateFile],
+      pairing: bool(env[HUB_ENV.pairing]),
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),

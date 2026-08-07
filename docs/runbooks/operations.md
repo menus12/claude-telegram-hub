@@ -27,6 +27,15 @@ Agents are logical names, not new bots. To add one, attach a new session with a 
 `TELEGRAM_HUB_AGENT` (or run in a repo whose basename is the desired name) — see
 [channel-install.md](../deploy/channel-install.md). No hub change or new BotFather bot needed.
 
+## Manage the allowlist at runtime
+
+`HUB_ALLOWLIST` is the seed set at deploy; admins can change access live from chat without a
+restart. Admins are `HUB_ADMINS` (defaulting to the seed). Commands: `/allow <id>`, `/deny <id>`,
+`/allowlist`, `/pending`, `/start`. Set `HUB_STATE_FILE` to a path on persistent storage (a mounted
+volume for a container) so the changes **survive a restart** — without it, runtime changes are
+in-memory only. With `HUB_PAIRING=on`, an unknown sender lands in `pending` and admins are notified,
+rather than being dropped silently. All grants/revocations are logged with who did what.
+
 ## Rotate the session secret
 
 1. Set the new `HUB_SESSION_SECRET` and restart the hub.

@@ -20,6 +20,9 @@ describe("loadHubConfig", () => {
     expect(cfg.ackSlaMs).toBe(120000);
     expect(cfg.answerSlaMs).toBe(600000);
     expect(cfg.duplicateName).toBe("reject");
+    expect(cfg.admins).toEqual([]);
+    expect(cfg.stateFile).toBeUndefined();
+    expect(cfg.pairing).toBe(false);
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
@@ -62,6 +65,18 @@ describe("loadHubConfig", () => {
     expect(() =>
       loadHubConfig({ ...minimal, HUB_ACK_SLA: "300000", HUB_ANSWER_SLA: "120000" }),
     ).toThrow(/answerSlaMs/);
+  });
+
+  it("reads the admin/state/pairing knobs", () => {
+    const cfg = loadHubConfig({
+      ...minimal,
+      HUB_ADMINS: "1, 2",
+      HUB_STATE_FILE: "/data/access.json",
+      HUB_PAIRING: "on",
+    });
+    expect(cfg.admins).toEqual(["1", "2"]);
+    expect(cfg.stateFile).toBe("/data/access.json");
+    expect(cfg.pairing).toBe(true);
   });
 
   it("reads the duplicate-name policy and rejects an unknown value", () => {

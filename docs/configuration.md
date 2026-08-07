@@ -24,6 +24,9 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_ACK_SLA` | int | `120000` | T1 — silence (ms) before the hub nudges the peer once. |
 | `HUB_ANSWER_SLA` | int | `600000` | T2 — silence (ms) before the hub escalates to the operator and unblocks the asker. Must be > `HUB_ACK_SLA`. |
 | `HUB_DUPLICATE_NAME` | enum | `reject` | On a name collision with a **live** session: `reject` keeps the incumbent (+ room notice), `replace` takes over. A dead/half-open incumbent is always taken over (restart-safe). |
+| `HUB_ADMINS` | csv | (allowlist seed) | User ids allowed to run in-chat allowlist commands (`/allow`, `/deny`, `/allowlist`, `/pending`). Defaults to `HUB_ALLOWLIST`. |
+| `HUB_STATE_FILE` | string | — | JSON file persisting runtime allowlist changes across restarts. Unset = in-memory only. |
+| `HUB_PAIRING` | bool | `false` | Route an unknown sender into a `pending` queue (+ notify admins) instead of dropping silently. |
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
 | `HUB_BIND_PORT` | int (0–65535) | `8787` | Port for the session-facing server (`0` = OS-assigned ephemeral). |

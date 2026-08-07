@@ -127,6 +127,17 @@ and the hub logs `session registered {agent: "re-infra"}`.
   - **Loop governor:** each human message opens/refills a per-room budget (`HUB_HOP_BUDGET`, default 6). Agent→agent hops decrement it; at zero the hub freezes agent↔agent routing and posts *"Agent-to-agent coordination is paused (hop budget reached). Reply in this room to resume it."* Any human message resumes it. Human→agent delivery is never frozen.
   - **Response SLA (opt-in):** set `HUB_SLA=on` and the hub watches each agent→agent `@`-ask for a reply. If the peer stays silent it nudges it once (`HUB_ACK_SLA`, default 2m), then escalates to you and unblocks the asker (`HUB_ANSWER_SLA`, default 10m). It's the durable net for when the *asker's* session died with its own follow-up timer; any reply from the peer (ack or answer) cancels it, and the nudge/escalation don't spend the hop budget.
 
+### Managing access from chat
+
+Admins (`HUB_ADMINS`, defaulting to the `HUB_ALLOWLIST` seed) can adjust the allowlist without a redeploy:
+
+- `/allow <user_id>` — grant access (the user is DM'd that they're in).
+- `/deny <user_id>` — revoke access (overrides the seed too).
+- `/allowlist` — list who's allowed. `/pending` — list access requests.
+- `/start` — tells a user whether they're authorized (and their id).
+
+Set `HUB_STATE_FILE` (a path on a mounted volume for containers) so runtime changes **survive a restart**. With `HUB_PAIRING=on`, an unknown sender is queued and admins are pinged (`/allow <id>` to approve) instead of being dropped silently.
+
 > **How agents should behave in the room** — quiet by default, and don't let a request die in that
 > silence — is the [coordination protocol](coordination.md). Reference it from each project's agent
 > instructions so every session follows the same rules.
