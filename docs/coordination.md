@@ -4,6 +4,10 @@ The canonical protocol for how Claude Code sessions behave when several of them 
 with a human **operator**. It ships with the hub so every deployment references the same rules;
 projects add only their specifics (which agents exist, which bot/room) in their own knowledge base.
 
+> **Projects reference this file — they don't copy it.** To point a repo at this protocol (and
+> propagate an update across projects), use the runbook:
+> [adopt-coordination-protocol.md](runbooks/adopt-coordination-protocol.md).
+
 It has two halves, because a shared room has two opposite failure modes:
 
 - **Noise** — every `@mention` earns a reply, every reply earns a "got it", and a one-line task
