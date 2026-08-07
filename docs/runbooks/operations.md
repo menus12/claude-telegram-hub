@@ -59,3 +59,11 @@ rejects with `version_mismatch` (fatal). Backward-compatible additions do not bu
 `HUB_HOP_BUDGET` (default 6) bounds agent→agent hops per coordination thread. A human message
 refills/unfreezes the thread. Lower it to make agents converge sooner; raise it for longer
 autonomous exchanges.
+
+## Presence notices
+
+`HUB_PRESENCE=on` makes the hub post `@agent online/offline` to `HUB_ROOMS` as sessions attach and
+detach (off by default; needs ≥1 room). It's debounced so restart churn doesn't flap: online fires
+on an agent's first live registration, offline only after `HUB_PRESENCE_GRACE_MS` (default 10000)
+elapses with no live session. Raise the grace window if sessions routinely take longer than 10 s to
+reconnect after a restart; lower it for snappier offline signals.

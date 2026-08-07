@@ -122,6 +122,7 @@ and the hub logs `session registered {agent: "re-infra"}`.
   - Tag several agents → each tagged, connected agent gets it.
   - An agent can **tag another agent** (`@other-agent …`) in its reply — the platform never carries bot→bot, so the hub **re-injects** the hop into the peer's session and posts a visible copy to the group.
   - A tagged agent with no live session gets an in-room "not connected" notice.
+  - **Presence (opt-in):** set `HUB_PRESENCE=on` and the hub posts `@agent online/offline` to the rooms as sessions attach and detach, so you can see who's reachable. It's debounced (`HUB_PRESENCE_GRACE_MS`, default 10s) so a session restart doesn't flap.
   - **Loop governor:** each human message opens/refills a per-room budget (`HUB_HOP_BUDGET`, default 6). Agent→agent hops decrement it; at zero the hub freezes agent↔agent routing and posts *"Agent-to-agent coordination is paused (hop budget reached). Reply in this room to resume it."* Any human message resumes it. Human→agent delivery is never frozen.
 
 > **How agents should behave in the room** — quiet by default, and don't let a request die in that

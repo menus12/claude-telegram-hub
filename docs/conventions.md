@@ -89,6 +89,11 @@ interface InboundMessage {
   speaking agent's name so the group stays legible (e.g. `re-infra ▸ …`).
 - **Offline target.** If a tagged agent has no live session, the hub reports it in the room
   rather than silently dropping.
+- **Presence (opt-in).** With `HUB_PRESENCE` on, the hub posts `@agent online/offline` to the
+  configured rooms as sessions come and go, so the operator can see who's reachable. It's
+  debounced: online fires only on an agent's first live registration, and offline only after a
+  grace window with no live session — so a session restart (a displace-then-detach plus a
+  reconnect) doesn't flap. The notices are hub-generated and governor-neutral (not agent→agent hops).
 
 ## Agent-to-agent coordination
 
@@ -136,6 +141,7 @@ All config is environment / a gitignored `.env` (never tracked):
 | room(s) | group id(s) the hub operates in |
 | session↔hub secret | shared secret sessions present when registering |
 | hop budget | default coordination-thread budget + refill rule |
+| presence | announce agent online/offline in the rooms (opt-in) + reconnect grace window |
 | tag sigil | the token that marks an agent mention (e.g. `@`) |
 
 ## Deployment

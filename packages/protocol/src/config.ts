@@ -37,6 +37,21 @@ function num(v: string | undefined): number | string | undefined {
   return Number.isFinite(n) ? n : v;
 }
 
+/**
+ * Coerce a boolean env value. Accepts `on/off`, `true/false`, `1/0`, `yes/no`
+ * (case-insensitive). Returns `undefined` for absent/blank (so schema defaults
+ * apply) and passes an unrecognized string through so the schema reports a clear
+ * error rather than silently treating it as false.
+ */
+function bool(v: string | undefined): boolean | string | undefined {
+  if (v === undefined) return undefined;
+  const t = v.trim().toLowerCase();
+  if (t === "") return undefined;
+  if (["on", "true", "1", "yes"].includes(t)) return true;
+  if (["off", "false", "0", "no"].includes(t)) return false;
+  return v;
+}
+
 function parseOrThrow<S extends z.ZodTypeAny>(
   schema: S,
   input: unknown,
@@ -61,6 +76,13 @@ export const hubConfigSchema = z.object({
   rooms: z.array(z.string().min(1)).default([]),
   /** Coordination-thread hop budget before agent→agent routing freezes. */
   hopBudget: z.number().int().positive().default(6),
+  /** Announce agent online/offline in the configured rooms. Off by default. */
+  presence: z.boolean().default(false),
+  /**
+   * Grace window (ms) a dropped session may reconnect within before the hub
+   * announces it offline — absorbs restart churn so presence doesn't flap.
+   */
+  presenceGraceMs: z.number().int().nonnegative().default(10000),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -79,6 +101,8 @@ export const HUB_ENV = {
   allowlist: "HUB_ALLOWLIST",
   rooms: "HUB_ROOMS",
   hopBudget: "HUB_HOP_BUDGET",
+  presence: "HUB_PRESENCE",
+  presenceGraceMs: "HUB_PRESENCE_GRACE_MS",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -94,6 +118,8 @@ export function loadHubConfig(env: Env): HubConfig {
       allowlist: csv(env[HUB_ENV.allowlist]),
       rooms: csv(env[HUB_ENV.rooms]),
       hopBudget: num(env[HUB_ENV.hopBudget]),
+      presence: bool(env[HUB_ENV.presence]),
+      presenceGraceMs: num(env[HUB_ENV.presenceGraceMs]),
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),
