@@ -62,6 +62,7 @@ export class AccessController {
     this.stateFile = opts.stateFile;
     this.logger = opts.logger;
     this.load();
+    this.verifyWritable();
   }
 
   isAllowed(id: string): boolean {
@@ -122,18 +123,45 @@ export class AccessController {
     }
   }
 
-  private persist(): void {
+  private writeState(): void {
     if (!this.stateFile) return;
     const data: PersistShape = {
       allow: [...this.allow],
       denied: [...this.denied],
       pending: [...this.pending],
     };
+    mkdirSync(dirname(this.stateFile), { recursive: true });
+    writeFileSync(this.stateFile, JSON.stringify(data, null, 2));
+  }
+
+  private persist(): void {
+    if (!this.stateFile) return;
     try {
-      mkdirSync(dirname(this.stateFile), { recursive: true });
-      writeFileSync(this.stateFile, JSON.stringify(data, null, 2));
+      this.writeState();
     } catch (err) {
       this.logger?.("warn", "failed to persist access state", { error: String(err) });
+    }
+  }
+
+  /**
+   * At boot, confirm `HUB_STATE_FILE` is actually writable by materializing it.
+   * If it isn't (a common misconfig: a read-only mount, or an Azure Files / Docker
+   * volume not writable by the container's non-root uid), fail *loudly* — otherwise
+   * `/allow` would appear to work but every runtime change would be lost on the next
+   * restart, which is exactly when the operator is relying on it.
+   */
+  private verifyWritable(): void {
+    if (!this.stateFile) return;
+    try {
+      this.writeState();
+    } catch (err) {
+      this.logger?.(
+        "error",
+        `HUB_STATE_FILE (${this.stateFile}) is not writable — runtime allowlist changes ` +
+          `will be LOST on restart. Ensure the mount exists and is writable by the ` +
+          `container user (uid 1000).`,
+        { error: String(err) },
+      );
     }
   }
 }

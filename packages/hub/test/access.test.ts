@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AccessController, parseCommand } from "../src/index.js";
+import type { Logger } from "../src/index.js";
 
 describe("parseCommand", () => {
   it("parses a bare command and one with args", () => {
@@ -51,6 +52,39 @@ describe("AccessController", () => {
     a.allowUser("2"); // approving clears pending
     expect(a.listPending()).toEqual([]);
     expect(a.listAllowed()).toEqual(["1", "2"]);
+  });
+
+  it("materializes the state file at boot when the path is writable", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cth-access-"));
+    try {
+      const file = join(dir, "nested", "access.json"); // parent dir doesn't exist yet
+      new AccessController({ seed: ["1"], admins: ["1"], stateFile: file });
+      expect(existsSync(file)).toBe(true); // created (and dir mkdir'd) on boot
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("logs a loud error at boot when the state file isn't writable", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cth-access-"));
+    try {
+      // Make the parent a *file*, so mkdir/write under it fails (ENOTDIR).
+      const notADir = join(dir, "blocker");
+      writeFileSync(notADir, "x");
+      const logs: { level: string; msg: string }[] = [];
+      const logger: Logger = (level, msg) => logs.push({ level, msg });
+      new AccessController({
+        seed: ["1"],
+        admins: ["1"],
+        stateFile: join(notADir, "access.json"),
+        logger,
+      });
+      const err = logs.find((l) => l.level === "error");
+      expect(err?.msg).toContain("HUB_STATE_FILE");
+      expect(err?.msg).toContain("not writable");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("persists runtime changes and reloads them (survives a restart)", () => {

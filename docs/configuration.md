@@ -26,7 +26,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_ANSWER_SLA` | int | `600000` | T2 — silence (ms) before the hub escalates to the operator and unblocks the asker. Must be > `HUB_ACK_SLA`. |
 | `HUB_DUPLICATE_NAME` | enum | `reject` | On a name collision with a **live** session: `reject` keeps the incumbent (+ room notice), `replace` takes over. A dead/half-open incumbent is always taken over (restart-safe). |
 | `HUB_ADMINS` | csv | (allowlist seed) | User ids allowed to run in-chat allowlist commands (`/allow`, `/deny`, `/allowlist`, `/pending`). Defaults to `HUB_ALLOWLIST`. |
-| `HUB_STATE_FILE` | string | — | JSON file persisting runtime allowlist changes across restarts. Unset = in-memory only. |
+| `HUB_STATE_FILE` | string | — | JSON file persisting runtime allowlist changes across restarts. Must be on **writable, persistent** storage (a mounted volume; Azure Files for ACI — see [deploy](deploy/azure-container-instances.md#3-persistent-state-runtime-allowlist-management)). Writable by uid 1000; the hub logs a loud error at boot if not. Unset = in-memory only. |
 | `HUB_PAIRING` | bool | `false` | Route an unknown sender into a `pending` queue (+ notify admins) instead of dropping silently. |
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
