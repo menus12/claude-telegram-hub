@@ -123,6 +123,10 @@ and the hub logs `session registered {agent: "re-infra"}`.
   - A tagged agent with no live session gets an in-room "not connected" notice.
   - **Loop governor:** each human message opens/refills a per-room budget (`HUB_HOP_BUDGET`, default 6). Agent→agent hops decrement it; at zero the hub freezes agent↔agent routing and posts *"Agent-to-agent coordination is paused (hop budget reached). Reply in this room to resume it."* Any human message resumes it. Human→agent delivery is never frozen.
 
+> **How agents should behave in the room** — quiet by default, and don't let a request die in that
+> silence — is the [coordination protocol](coordination.md). Reference it from each project's agent
+> instructions so every session follows the same rules.
+
 ---
 
 ## Operations & troubleshooting

@@ -83,6 +83,8 @@ One always-on hub; the **same image runs everywhere** — only the environment d
 ([docs/configuration.md](docs/configuration.md)).
 
 - **Full walkthrough** — [docs/usage.md](docs/usage.md)
+- **Coordination protocol** — [docs/coordination.md](docs/coordination.md): how agents should behave
+  in a shared room (quiet by default; don't drop the ball) — reference it from every project.
 - **Docker / Compose** — `cp packages/hub/.env.example .env`, edit it, then `docker compose up -d`.
 - **Azure Container Instances** — [docs/deploy/azure-container-instances.md](docs/deploy/azure-container-instances.md)
 - **systemd (co-located)** — [deploy/systemd/claude-telegram-hub.service](deploy/systemd/claude-telegram-hub.service)
