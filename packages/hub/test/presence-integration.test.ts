@@ -10,6 +10,7 @@ function hubConfig(over: Record<string, string> = {}) {
     HUB_SESSION_SECRET: "s3cr3t",
     HUB_ALLOWLIST: "user1",
     HUB_ROOMS: "-100",
+    HUB_NOTIFY: "rooms", // these tests assert room delivery; default is now dm
     HUB_BIND_HOST: "127.0.0.1",
     HUB_BIND_PORT: "0",
     HUB_ADAPTER: "loopback",
@@ -92,5 +93,29 @@ describe("presence notices", () => {
     await waitFor(a.registered);
     await delay(50);
     expect(adapter.sent).toHaveLength(0);
+  });
+
+  it("delivers presence to the admin DM by default (no group configured)", async () => {
+    // dm target, no HUB_ROOMS: the notice still reaches the operator (admin = seed).
+    const { adapter, url } = await startHub({ HUB_PRESENCE: "on", HUB_NOTIFY: "dm", HUB_ROOMS: "" });
+    const a = attach(url, "re-infra");
+    await waitFor(a.registered);
+
+    const online = await adapter.waitForSent((s) => s.out.text.includes("online"));
+    expect(online.out.text).toBe("@re-infra is online.");
+    expect(online.target.room).toBe("user1"); // the admin's DM (id == chat id)
+  });
+
+  it("`both` delivers to the room and the admin DM", async () => {
+    const { adapter, url } = await startHub({ HUB_PRESENCE: "on", HUB_NOTIFY: "both" });
+    const a = attach(url, "re-infra");
+    await waitFor(a.registered);
+    await waitFor(() => adapter.sent.filter((s) => s.out.text.includes("online")).length >= 2);
+
+    const rooms = adapter.sent
+      .filter((s) => s.out.text.includes("online"))
+      .map((s) => s.target.room)
+      .sort();
+    expect(rooms).toEqual(["-100", "user1"]);
   });
 });
