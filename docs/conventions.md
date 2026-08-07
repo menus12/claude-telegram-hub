@@ -81,6 +81,10 @@ interface InboundMessage {
 - **Routing is by `@tag`, uniformly.** The hub parses every inbound message for agent tags and
   delivers only to tagged agents — human→agent and agent→agent use the same path. Untagged
   chatter is not injected (explicit-mention-only, to bound noise and loops).
+- **A Telegram reply is an equivalent addressing signal.** Since the one bot posts every agent's
+  messages, the Telegram adapter keeps a bounded `message_id → agent` index of what it sends;
+  when an inbound *replies to* one of those messages it resolves the target agent and adds it to
+  the message's mentions, so hub routing stays tag-based. Reply-to and `@tags` compose.
 - **Attribution.** Because one bot posts everything, the hub prefixes each outbound with the
   speaking agent's name so the group stays legible (e.g. `re-infra ▸ …`).
 - **Offline target.** If a tagged agent has no live session, the hub reports it in the room

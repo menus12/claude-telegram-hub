@@ -8,6 +8,8 @@ export interface SentText {
   chatId: string;
   text: string;
   opts?: SendOptions;
+  /** The message_id assigned to this send (as returned by sendMessage). */
+  messageId: number;
 }
 
 /** In-memory TelegramApi for tests: push inbound messages, capture sends. */
@@ -16,6 +18,7 @@ export class FakeTelegramApi implements TelegramApi {
   started = false;
   private handler: ((msg: TgMessage) => void) | undefined;
   private readonly pendingErrors: Error[] = [];
+  private nextMessageId = 1000;
 
   /** Make the next sendMessage reject with `err` (once). */
   failNext(err: Error): void {
@@ -36,11 +39,16 @@ export class FakeTelegramApi implements TelegramApi {
     return Promise.resolve();
   }
 
-  sendMessage(chatId: string, text: string, opts?: SendOptions): Promise<void> {
+  sendMessage(
+    chatId: string,
+    text: string,
+    opts?: SendOptions,
+  ): Promise<number | undefined> {
     const err = this.pendingErrors.shift();
     if (err) return Promise.reject(err);
-    this.sent.push({ chatId, text, opts });
-    return Promise.resolve();
+    const messageId = this.nextMessageId++;
+    this.sent.push({ chatId, text, opts, messageId });
+    return Promise.resolve(messageId);
   }
 
   /** Simulate a Telegram message arriving. */

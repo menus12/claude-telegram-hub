@@ -12,6 +12,12 @@ export interface TgMessage {
   chat: { id: number; type: TgChatType };
   from?: { id: number; is_bot: boolean; username?: string };
   text?: string;
+  /**
+   * The message this one replies to, if any. Only its `message_id` matters here:
+   * the bot sends everything, so `reply_to_message.from` is always the bot and
+   * can't identify the agent — the adapter's own message_id→agent index does.
+   */
+  reply_to_message?: { message_id: number };
 }
 
 export interface SendOptions {
@@ -26,6 +32,10 @@ export interface TelegramApi {
   onMessage(handler: (msg: TgMessage) => void): void;
   /** Begin long-polling `getUpdates` (the sole consumer of the bot token). */
   start(): Promise<void>;
-  sendMessage(chatId: string, text: string, opts?: SendOptions): Promise<void>;
+  /**
+   * Send a message, returning the sent Telegram `message_id` so the adapter can
+   * index it for reply-to routing (`undefined` if the platform didn't report one).
+   */
+  sendMessage(chatId: string, text: string, opts?: SendOptions): Promise<number | undefined>;
   stop(): Promise<void>;
 }

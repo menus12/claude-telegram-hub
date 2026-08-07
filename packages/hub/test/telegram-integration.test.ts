@@ -105,6 +105,36 @@ describe("Telegram ↔ hub ↔ channel (mocked Bot API)", () => {
     expect(a.injected).toHaveLength(0);
   });
 
+  it("routes a Telegram reply (no @tag) back to the agent that spoke", async () => {
+    const { api, url } = await startHub();
+    const a = attach(url, "re-infra");
+    await waitFor(a.registered);
+
+    // human tags the agent; the agent replies into the DM
+    api.push({
+      message_id: 30,
+      chat: { id: 555, type: "private" },
+      from: { id: 42, is_bot: false },
+      text: "@re-infra status?",
+    });
+    await waitFor(() => a.injected.length >= 1);
+    a.client.sendReply({ room: "555", text: "all green" });
+    await waitFor(() => api.sent.length >= 1);
+    const agentMessageId = api.sent[0].messageId;
+
+    // human replies to the agent's message with NO @tag — must still reach the agent
+    api.push({
+      message_id: 31,
+      chat: { id: 555, type: "private" },
+      from: { id: 42, is_bot: false },
+      text: "and the db?",
+      reply_to_message: { message_id: agentMessageId },
+    });
+    await waitFor(() => a.injected.length >= 2);
+    expect(a.injected[1].message.text).toBe("and the db?");
+    expect(a.injected[1].message.mentions).toContain("re-infra");
+  });
+
   it("routes a group message to exactly the mentioned agent", async () => {
     const { api, url } = await startHub();
     const infra = attach(url, "re-infra");
