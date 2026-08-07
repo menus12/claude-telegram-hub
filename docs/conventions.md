@@ -150,7 +150,13 @@ Two layers, because prompt-level discipline alone won't hold:
 - **session ↔ hub** — a shared secret plus the declared agent name; the hub rejects
   registrations that don't present it, so a stray process can't impersonate an agent.
 - **Allowlist** — the hub only accepts messages from allowlisted platform user ids; unknown
-  senders are dropped (no open pairing surface).
+  senders are dropped by default. `HUB_ALLOWLIST` is the **seed**; admins (`HUB_ADMINS`, defaulting
+  to the seed) can adjust access at runtime from chat — `/allow <id>`, `/deny <id>`, `/allowlist`,
+  `/pending` — with changes persisted to `HUB_STATE_FILE` so they survive a restart (effective set =
+  seed ∪ runtime-allowed − denied). With `HUB_PAIRING=on`, an unknown sender is queued as `pending`
+  and admins are notified instead of a silent drop, so access can be granted with one command.
+  Non-admins running an admin command are ignored; a leading-slash message that isn't a known
+  command (e.g. `/deploy @agent`) routes normally.
 - **Permission posture** — the hub is a transport; it does not widen what a session can do.
   Since chat can drive real tool use, the consuming project should choose the session's
   permission mode deliberately (reads free, writes/commands gated) — that decision lives with

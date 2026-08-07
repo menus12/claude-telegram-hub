@@ -1,5 +1,12 @@
 export { Hub, type HubDeps } from "./hub.js";
 export { LoopGovernor, type GovernorDecision } from "./governor.js";
+export {
+  AccessController,
+  parseCommand,
+  KNOWN_COMMANDS,
+  type AccessControllerOptions,
+  type ParsedCommand,
+} from "./access.js";
 export { PresenceTracker, type PresenceTrackerOptions } from "./presence.js";
 export { ResponseSla, type ResponseSlaOptions, type PendingAsk } from "./response-sla.js";
 export { realScheduler, type Scheduler } from "./scheduler.js";

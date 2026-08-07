@@ -14,6 +14,7 @@ import type {
   SendFileFrame,
 } from "@claude-telegram-hub/protocol";
 import type { TransportAdapter } from "./adapter.js";
+import { AccessController, KNOWN_COMMANDS, parseCommand, type ParsedCommand } from "./access.js";
 import { AgentRegistry } from "./registry.js";
 import { LoopGovernor } from "./governor.js";
 import { PresenceTracker } from "./presence.js";
@@ -51,14 +52,24 @@ function quote(text: string, max = 80): string {
 export class Hub {
   private readonly registry = new AgentRegistry();
   private readonly server: SessionServer;
-  private readonly allowlist: Set<string>;
+  private readonly access: AccessController;
+  private readonly pairing: boolean;
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
   private started = false;
 
   constructor(private readonly deps: HubDeps) {
-    this.allowlist = new Set(deps.config.allowlist);
+    // Admins default to the allowlist seed when none are configured explicitly.
+    const admins =
+      deps.config.admins.length > 0 ? deps.config.admins : deps.config.allowlist;
+    this.access = new AccessController({
+      seed: deps.config.allowlist,
+      admins,
+      ...(deps.config.stateFile ? { stateFile: deps.config.stateFile } : {}),
+      logger: deps.logger,
+    });
+    this.pairing = deps.config.pairing;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -174,6 +185,87 @@ export class Hub {
     }
   }
 
+  /** Send a hub notice into a single room/DM (a command reply or admin ping). */
+  private replyNotice(room: string, text: string): void {
+    void this.deps.adapter
+      .send({ adapter: this.deps.adapter.name, room }, { agent: "hub", text, kind: "notice" })
+      .catch((err: unknown) => {
+        this.deps.logger("warn", "notice send failed", { room, error: String(err) });
+      });
+  }
+
+  /** DM every admin (admin id doubles as their DM room on Telegram). */
+  private notifyAdmins(text: string): void {
+    for (const adminId of this.access.adminIds()) this.replyNotice(adminId, text);
+  }
+
+  /** Handle a known in-chat allowlist command from a human. */
+  private handleCommand(message: InboundMessage, cmd: ParsedCommand): void {
+    const { fromId, room } = message;
+
+    if (cmd.name === "start") {
+      if (this.access.isAllowed(fromId)) {
+        this.replyNotice(room, `You're authorized (id ${fromId}). Send @<agent> <message>.`);
+      } else {
+        this.handleUnauthorized(message, true);
+      }
+      return;
+    }
+
+    // All remaining commands are admin-only; non-admins are ignored.
+    if (!this.access.isAdmin(fromId)) {
+      this.deps.logger("info", "ignoring admin command from non-admin", { fromId, cmd: cmd.name });
+      return;
+    }
+
+    switch (cmd.name) {
+      case "allowlist":
+        this.replyNotice(room, `Allowed: ${this.access.listAllowed().join(", ") || "(none)"}`);
+        return;
+      case "pending":
+        this.replyNotice(room, `Pending: ${this.access.listPending().join(", ") || "(none)"}`);
+        return;
+      case "allow": {
+        const target = cmd.args[0];
+        if (!target) return void this.replyNotice(room, "Usage: /allow <user_id>");
+        this.access.allowUser(target);
+        this.deps.logger("info", "allowlist grant", { by: fromId, target });
+        this.replyNotice(room, `Allowed ${target}.`);
+        this.replyNotice(target, "You've been granted access. Send @<agent> <message> to reach an agent.");
+        return;
+      }
+      case "deny": {
+        const target = cmd.args[0];
+        if (!target) return void this.replyNotice(room, "Usage: /deny <user_id>");
+        this.access.denyUser(target);
+        this.deps.logger("info", "allowlist revoke", { by: fromId, target });
+        this.replyNotice(room, `Denied ${target}.`);
+        return;
+      }
+    }
+  }
+
+  /**
+   * An unauthorized human reached the hub. With pairing on, queue them for admin
+   * approval and notify admins; otherwise drop silently (an explicit `/start`
+   * still gets told their id so an admin can add them).
+   */
+  private handleUnauthorized(message: InboundMessage, explicit: boolean): void {
+    const { fromId, room } = message;
+    if (this.pairing) {
+      if (this.access.addPending(fromId)) {
+        this.notifyAdmins(`🔔 access request from ${fromId} — /allow ${fromId} to approve.`);
+      }
+      this.replyNotice(room, `Your access request (id ${fromId}) is pending admin approval.`);
+      return;
+    }
+    if (explicit) {
+      this.replyNotice(room, `Not authorized. Ask an admin to run /allow ${fromId}.`);
+      return;
+    }
+    this.deps.logger("warn", "dropping non-allowlisted sender", { fromId });
+  }
+
   /** Post a hub-generated notice (e.g. presence) to every configured room. */
   private postToRooms(notice: OutboundMessage): void {
     for (const room of this.deps.config.rooms) {
@@ -190,12 +282,19 @@ export class Hub {
 
   /** adapter → hub: a normalized platform inbound message (optionally with a file). */
   private async onInbound(message: InboundMessage, file?: FilePayload): Promise<void> {
-    // Allowlist applies to real senders; agent-origin traffic is hub-internal.
-    if (message.fromKind === "human" && !this.allowlist.has(message.fromId)) {
-      this.deps.logger("warn", "dropping non-allowlisted sender", {
-        fromId: message.fromId,
-      });
-      return;
+    // Access control applies to real senders; agent-origin traffic is hub-internal.
+    if (message.fromKind === "human") {
+      // In-chat allowlist commands (a known `/name`) are handled before the access
+      // check, so `/start` from an unknown sender and admin commands both work.
+      const cmd = parseCommand(message.text);
+      if (cmd && KNOWN_COMMANDS.has(cmd.name)) {
+        this.handleCommand(message, cmd);
+        return;
+      }
+      if (!this.access.isAllowed(message.fromId)) {
+        this.handleUnauthorized(message, false);
+        return;
+      }
     }
 
     // Any human message refills the room's coordination thread (human presence =
