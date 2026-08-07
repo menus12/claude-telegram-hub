@@ -116,6 +116,19 @@ describe("resolveChannelConfig", () => {
     expect(cfg.sessionSecret).toBe("s");
     expect(cfg.agent).toBe("from-file");
     expect(cfg.reconnectInitialMs).toBe(500);
+    expect(cfg.maxFileMb).toBe(50);
+  });
+
+  it("coerces the max file size from env", () => {
+    const cfg = resolveChannelConfig([
+      channelEnvLayer({
+        TELEGRAM_HUB_URL: "ws://h:8787",
+        TELEGRAM_HUB_SECRET: "s",
+        TELEGRAM_HUB_AGENT: "a",
+        TELEGRAM_HUB_MAX_FILE_MB: "20",
+      }),
+    ]);
+    expect(cfg.maxFileMb).toBe(20);
   });
 
   it("uses the agent fallback when no layer supplies one", () => {

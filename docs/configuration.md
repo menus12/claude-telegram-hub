@@ -60,6 +60,7 @@ back to `agentFallback` (the working-dir basename) when no layer supplies an age
 | `TELEGRAM_HUB_LOG_LEVEL` | enum | `info` | `debug` \| `info` \| `warn` \| `error`. |
 | `TELEGRAM_HUB_RECONNECT_INITIAL_MS` | int | `500` | Initial reconnect backoff for the hub link. |
 | `TELEGRAM_HUB_RECONNECT_MAX_MS` | int | `15000` | Maximum reconnect backoff. |
+| `TELEGRAM_HUB_MAX_FILE_MB` | int | `50` | Max size of a file this session sends out via `send_file`. (Inbound files are capped at 20 MB by the Telegram Bot API's download limit.) |
 
 > `TELEGRAM_HUB_SECRET` and `HUB_SESSION_SECRET` are the **same secret** viewed from the two
 > sides. Keep them in sync per deployment.

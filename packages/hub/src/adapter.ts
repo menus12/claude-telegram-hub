@@ -1,11 +1,17 @@
 import type {
+  FilePayload,
   InboundMessage,
+  OutboundFile,
   OutboundMessage,
   RouteTarget,
 } from "@claude-telegram-hub/protocol";
 
-/** Called by an adapter to hand a normalized inbound message to the hub. */
-export type Inbox = (message: InboundMessage) => Promise<void>;
+/**
+ * Called by an adapter to hand a normalized inbound message to the hub. An
+ * accompanying `file` (an operator photo/document) is passed alongside the
+ * message; the hub streams the bytes on to the tagged session's channel.
+ */
+export type Inbox = (message: InboundMessage, file?: FilePayload) => Promise<void>;
 
 /**
  * The pluggable transport seam. The hub core is adapter-agnostic: it never
@@ -19,6 +25,8 @@ export interface TransportAdapter {
   start(inbox: Inbox): Promise<void>;
   /** Deliver an outbound message to a platform target. */
   send(target: RouteTarget, out: OutboundMessage): Promise<void>;
+  /** Deliver a file (with optional caption) to a platform target. */
+  sendFile(target: RouteTarget, out: OutboundFile): Promise<void>;
   /** Stop producing messages and release resources. */
   stop(): Promise<void>;
 }

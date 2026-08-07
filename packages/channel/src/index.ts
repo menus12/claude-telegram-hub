@@ -3,14 +3,22 @@ export {
   buildChannel,
   buildInboundNotification,
   parseReplyArgs,
+  parseSendFileArgs,
   CHANNEL_NOTIFICATION_METHOD,
   type Channel,
   type BuildChannelDeps,
+  type SendFileArgs,
 } from "./channel.js";
+export {
+  materializeInboundFile,
+  readOutboundFile,
+  mimeFromExtension,
+} from "./files.js";
 export {
   HubClient,
   type HubLike,
   type HubClientEvents,
   type ReplyInput,
+  type SendFileInput,
 } from "./hub-client.js";
 export { makeLogger, type Logger } from "./logger.js";

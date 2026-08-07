@@ -4,11 +4,13 @@ import {
   slaEscalationNotice,
 } from "@claude-telegram-hub/protocol";
 import type {
+  FilePayload,
   HubConfig,
   InboundMessage,
   OutboundMessage,
   ReplyFrame,
   RouteTarget,
+  SendFileFrame,
 } from "@claude-telegram-hub/protocol";
 import type { TransportAdapter } from "./adapter.js";
 import { AgentRegistry } from "./registry.js";
@@ -82,6 +84,7 @@ export class Hub {
       sessionSecret: deps.config.sessionSecret,
       registry: this.registry,
       onReply: (agent, reply) => this.onReply(agent, reply),
+      onSendFile: (agent, frame) => this.onSendFile(agent, frame),
       onRegister: (agent) => this.presence?.onConnect(agent),
       onDetach: (agent) => this.presence?.onDetach(agent),
       isReady: () => this.started,
@@ -91,7 +94,7 @@ export class Hub {
 
   async start(): Promise<void> {
     await this.server.listen();
-    await this.deps.adapter.start((m) => this.onInbound(m));
+    await this.deps.adapter.start((m, f) => this.onInbound(m, f));
     this.started = true;
     this.deps.logger("info", "hub started", { adapter: this.deps.adapter.name });
   }
@@ -182,8 +185,8 @@ export class Hub {
     }
   }
 
-  /** adapter → hub: a normalized platform inbound message. */
-  private async onInbound(message: InboundMessage): Promise<void> {
+  /** adapter → hub: a normalized platform inbound message (optionally with a file). */
+  private async onInbound(message: InboundMessage, file?: FilePayload): Promise<void> {
     // Allowlist applies to real senders; agent-origin traffic is hub-internal.
     if (message.fromKind === "human" && !this.allowlist.has(message.fromId)) {
       this.deps.logger("warn", "dropping non-allowlisted sender", {
@@ -203,7 +206,20 @@ export class Hub {
     }
 
     // Human→agent delivery is never frozen — only agent→agent hops are bounded.
-    await this.routeToMentioned(message);
+    await this.routeToMentioned(message, file);
+  }
+
+  /** session → hub → adapter: deliver an agent's file out to a room. */
+  private onSendFile(agent: string, frame: SendFileFrame): void {
+    const target: RouteTarget = { adapter: this.deps.adapter.name, room: frame.room };
+    const out = {
+      agent,
+      file: frame.file,
+      ...(frame.caption ? { caption: frame.caption } : {}),
+    };
+    void this.deps.adapter.sendFile(target, out).catch((err: unknown) => {
+      this.deps.logger("warn", "adapter sendFile failed", { error: String(err) });
+    });
   }
 
   /** hub → adapter: a session's reply. */
@@ -272,7 +288,7 @@ export class Hub {
    * sessions, and post an in-room offline notice for any tagged agent without a
    * live session. An agent never re-injects into itself (self-tag is skipped).
    */
-  private async routeToMentioned(message: InboundMessage): Promise<void> {
+  private async routeToMentioned(message: InboundMessage, file?: FilePayload): Promise<void> {
     for (const agent of message.mentions) {
       if (message.fromKind === "agent" && agent === message.fromId) continue;
       const session = this.registry.get(agent);
@@ -284,11 +300,12 @@ export class Hub {
         );
         continue;
       }
-      session.send({ type: "inbound", message });
+      session.send({ type: "inbound", message, ...(file ? { file } : {}) });
       this.deps.logger("debug", "injected inbound", {
         agent,
         room: message.room,
         fromKind: message.fromKind,
+        hasFile: file !== undefined,
       });
     }
   }

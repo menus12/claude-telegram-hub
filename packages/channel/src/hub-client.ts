@@ -4,6 +4,7 @@ import {
   hubToSessionFrameSchema,
   type ChannelConfig,
   type ErrorCode,
+  type FilePayload,
   type InboundFrame,
   type LogLevel,
   type SessionToHubFrame,
@@ -16,11 +17,18 @@ export interface ReplyInput {
   replyToId?: string;
 }
 
+export interface SendFileInput {
+  room: string;
+  file: FilePayload;
+  caption?: string;
+}
+
 /** The subset of HubClient the channel wiring depends on (injectable in tests). */
 export interface HubLike {
   start(): void;
   stop(): void;
   sendReply(reply: ReplyInput): void;
+  sendFile(input: SendFileInput): void;
 }
 
 export interface HubClientEvents {
@@ -70,6 +78,15 @@ export class HubClient implements HubLike {
       text: reply.text,
       mentions: reply.mentions ?? [],
       ...(reply.replyToId ? { replyToId: reply.replyToId } : {}),
+    });
+  }
+
+  sendFile(input: SendFileInput): void {
+    this.send({
+      type: "send_file",
+      room: input.room,
+      file: input.file,
+      ...(input.caption ? { caption: input.caption } : {}),
     });
   }
 

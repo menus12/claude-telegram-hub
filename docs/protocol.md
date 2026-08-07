@@ -37,6 +37,7 @@ frame; the hub calls `isProtocolCompatible(peer)` and requires an **exact major 
 |--------|---------|--------|
 | `register` | First frame; authenticate + declare identity + version | `protocolVersion`, `agent`, `secret` |
 | `reply` | A message to deliver back out through the hub | `room`, `text`, `mentions[]` (default `[]`), `replyToId?` |
+| `send_file` | A file to deliver out to a room (agent → operator/room) | `room`, `file` (`FilePayload`), `caption?` |
 | `heartbeat` | Liveness keepalive | — |
 
 ### hub → session
@@ -44,7 +45,7 @@ frame; the hub calls `isProtocolCompatible(peer)` and requires an **exact major 
 | `type` | Purpose | Fields |
 |--------|---------|--------|
 | `registered` | Registration accepted | `agent`, `protocolVersion` |
-| `inbound` | A message to inject into the session | `message` (`InboundMessage`), `coordinationThread?` |
+| `inbound` | A message to inject into the session | `message` (`InboundMessage`), `coordinationThread?`, `file?` (`FilePayload`) |
 | `error` | A frame/connection was rejected | `code`, `message`, `fatal` (default `false`) |
 
 `error.code` is one of: `version_mismatch`, `auth_failed`, `unknown_agent`, `not_allowlisted`,
@@ -58,6 +59,11 @@ frame; the hub calls `isProtocolCompatible(peer)` and requires an **exact major 
 - **`OutboundMessage`** — a message leaving through an adapter: `agent` (the speaker, for
   attribution), `text`, `kind` (`reply` \| `notice`).
 - **`RouteTarget`** — where an outbound goes: `adapter`, `room`, `replyToId?`.
+- **`FilePayload`** — a file carried as bytes: `filename`, `mimeType`, `dataBase64`. Files travel
+  over the same WebSocket as messages, so file transfer works whether the hub is co-located or
+  remote. The channel (always co-located with its session) is what materializes an inbound file to
+  a local path and reads a local path for an outbound one; the hub only moves bytes and, for
+  Telegram, downloads/uploads them. Size is bounded per deployment (see configuration).
 
 ## Injection & reply (the channel mechanism)
 

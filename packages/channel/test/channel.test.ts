@@ -1,13 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildChannel,
   buildInboundNotification,
   parseReplyArgs,
+  parseSendFileArgs,
 } from "../src/index.js";
-import type { HubClientEvents, ReplyInput } from "../src/index.js";
-import type { ChannelConfig, InboundFrame } from "@claude-telegram-hub/protocol";
+import type { HubClientEvents, ReplyInput, SendFileInput } from "../src/index.js";
+import type { ChannelConfig, FilePayload, InboundFrame } from "@claude-telegram-hub/protocol";
 
 function cfg(): ChannelConfig {
   return {
@@ -17,6 +21,7 @@ function cfg(): ChannelConfig {
     logLevel: "error",
     reconnectInitialMs: 50,
     reconnectMaxMs: 100,
+    maxFileMb: 50,
   };
 }
 
@@ -75,6 +80,29 @@ describe("buildInboundNotification", () => {
       expect(key).toMatch(/^[A-Za-z0-9_]+$/);
     }
   });
+
+  it("surfaces an attachment path in meta and inline in the content", () => {
+    const note = buildInboundNotification(humanFrame("look"), "/tmp/x/shot.png");
+    expect(note.params.meta.attachment_path).toBe("/tmp/x/shot.png");
+    expect(note.params.content).toContain("look");
+    expect(note.params.content).toContain("/tmp/x/shot.png");
+  });
+});
+
+describe("parseSendFileArgs", () => {
+  it("accepts room + path (+ optional caption)", () => {
+    expect(parseSendFileArgs({ room: "-100", path: "/a/b.png" })).toEqual({
+      room: "-100",
+      path: "/a/b.png",
+    });
+    expect(parseSendFileArgs({ room: "r", path: "/p", caption: "hi" }).caption).toBe("hi");
+  });
+
+  it("rejects missing room or path, and a non-string caption", () => {
+    expect(() => parseSendFileArgs({ path: "/p" })).toThrow(/room/);
+    expect(() => parseSendFileArgs({ room: "r" })).toThrow(/path/);
+    expect(() => parseSendFileArgs({ room: "r", path: "/p", caption: 1 })).toThrow(/caption/);
+  });
 });
 
 describe("parseReplyArgs", () => {
@@ -115,7 +143,8 @@ describe("MCP wiring (in-memory)", () => {
         return {
           start() {},
           stop() {},
-          sendReply: (reply) => sent.push(reply),
+          sendReply: (reply) => void sent.push(reply),
+          sendFile() {},
         };
       },
     });
@@ -144,6 +173,49 @@ describe("MCP wiring (in-memory)", () => {
     expect(noteSpy).toHaveBeenCalledWith(
       expect.objectContaining({ method: "notifications/claude/channel" }),
     );
+
+    await client.close();
+    await channel.mcp.close();
+  });
+
+  it("exposes a send_file tool that reads a local file and forwards bytes to the hub", async () => {
+    const files: SendFileInput[] = [];
+    const channel = buildChannel(cfg(), {
+      logger: () => {},
+      createHub: () => ({
+        start() {},
+        stop() {},
+        sendReply() {},
+        sendFile: (f) => void files.push(f),
+      }),
+    });
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await channel.mcp.connect(serverTransport);
+    const client = new Client({ name: "test", version: "0.0.0" }, { capabilities: {} });
+    await client.connect(clientTransport);
+
+    const tools = await client.listTools();
+    expect(tools.tools.map((t) => t.name)).toContain("send_file");
+
+    const dir = await mkdtemp(join(tmpdir(), "cth-tool-"));
+    try {
+      const path = join(dir, "chart.png");
+      await writeFile(path, "PNG-BYTES");
+      await client.callTool({
+        name: "send_file",
+        arguments: { room: "-100", path, caption: "the chart" },
+      });
+      expect(files).toHaveLength(1);
+      expect(files[0].room).toBe("-100");
+      expect(files[0].caption).toBe("the chart");
+      const payload: FilePayload = files[0].file;
+      expect(payload.filename).toBe("chart.png");
+      expect(payload.mimeType).toBe("image/png");
+      expect(Buffer.from(payload.dataBase64, "base64").toString()).toBe("PNG-BYTES");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
 
     await client.close();
     await channel.mcp.close();
