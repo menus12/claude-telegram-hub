@@ -146,14 +146,24 @@ export class TelegramAdapter implements TransportAdapter {
     message: InboundMessage,
   ): Promise<FilePayload | undefined> {
     if (att.fileSize !== undefined && att.fileSize > INBOUND_MAX_BYTES) {
+      this.opts.logger?.("warn", "inbound attachment too large to fetch", {
+        filename: att.filename,
+        fileSize: att.fileSize,
+      });
       message.text = annotate(message.text, `attachment "${att.filename}" is too large to fetch (> 20 MB)`);
       return undefined;
     }
     const bytes = await this.opts.api.downloadFile(att.fileId);
     if (!bytes) {
+      this.opts.logger?.("warn", "inbound attachment download failed", { filename: att.filename });
       message.text = annotate(message.text, `attachment "${att.filename}" could not be fetched`);
       return undefined;
     }
+    this.opts.logger?.("info", "fetched inbound attachment", {
+      filename: att.filename,
+      mimeType: att.mimeType,
+      bytes: bytes.length,
+    });
     return {
       filename: att.filename,
       mimeType: att.mimeType,

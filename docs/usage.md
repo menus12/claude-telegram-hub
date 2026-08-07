@@ -157,3 +157,4 @@ Day-to-day operations (start/stop, health, secret rotation, adding agents, proto
 | Two sessions fight over one agent name | Give each a distinct `TELEGRAM_HUB_AGENT`; don't pin `agent` in the machine config. |
 | Bot silent / flaky in a group | Bot isn't a group admin (privacy mode on), or **more than one poller** is on the token. Exactly one hub per token. |
 | Sender ignored | Their numeric id isn't in `HUB_ALLOWLIST`. |
+| Text works but **files/images don't arrive** | Usually a **stale channel** (installed before file support) silently dropping the file — rebuild + reinstall the channel and start a fresh session ([channel-install.md](deploy/channel-install.md)). Also: the file's **caption must tag the agent** (or reply to its message), and inbound files are capped at 20 MB. Check hub logs for `fetched inbound attachment` to confirm the hub forwarded it. |

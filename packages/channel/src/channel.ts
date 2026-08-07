@@ -53,11 +53,16 @@ export function buildInboundNotification(
   };
   if (m.mentions.length > 0) meta.mentions = m.mentions.join(",");
   if (frame.coordinationThread) meta.thread = frame.coordinationThread;
-  if (attachmentPath) {
-    // Surface the saved file both as a meta attribute (for tooling) and inline
-    // (so the agent reliably notices it), mirroring the official plugin.
-    meta.attachment_path = attachmentPath;
-    content = `${content ? `${content}\n\n` : ""}[attachment saved to: ${attachmentPath}]`;
+  if (frame.file) {
+    // Always surface an attached file inline (so the agent reliably notices it) and
+    // in meta (for tooling) — with its saved path when we could write it locally, or
+    // a clear note when we couldn't. Never let a file arrive silently.
+    meta.attachment_name = frame.file.filename;
+    const note = attachmentPath
+      ? `[attachment saved to: ${attachmentPath}]`
+      : `[attachment "${frame.file.filename}" received but could not be saved locally]`;
+    if (attachmentPath) meta.attachment_path = attachmentPath;
+    content = `${content ? `${content}\n\n` : ""}${note}`;
   }
   return { method: CHANNEL_NOTIFICATION_METHOD, params: { content, meta } };
 }
@@ -158,9 +163,13 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
         return;
       }
       // Materialize the bytes to a local path, then inject with that path so the
-      // agent can open the file. If the write fails, still inject the message.
+      // agent can open the file. If the write fails, still inject (the notification
+      // announces the file either way, so it's never silently dropped).
       void materializeInboundFile(cfg.agent, frame.file)
-        .then((path) => inject(frame, path))
+        .then((path) => {
+          log("info", "saved inbound file", { path, filename: frame.file?.filename });
+          inject(frame, path);
+        })
         .catch((err: unknown) => {
           log("warn", "failed to save inbound file", { error: String(err) });
           inject(frame);
