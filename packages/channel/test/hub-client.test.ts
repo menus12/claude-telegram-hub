@@ -68,6 +68,7 @@ function cfg(url: string, over: Partial<ChannelConfig> = {}): ChannelConfig {
     logLevel: "error",
     reconnectInitialMs: 30,
     reconnectMaxMs: 120,
+    maxFileMb: 50,
     ...over,
   };
 }

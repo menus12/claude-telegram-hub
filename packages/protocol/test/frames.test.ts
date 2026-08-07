@@ -39,6 +39,28 @@ describe("session→hub frames", () => {
     ).toThrow();
   });
 
+  it("parses a send_file frame with an optional caption", () => {
+    const frame = sessionToHubFrameSchema.parse({
+      type: "send_file",
+      room: "-100",
+      file: { filename: "a.png", mimeType: "image/png", dataBase64: "AAAA" },
+      caption: "here",
+    });
+    if (frame.type !== "send_file") throw new Error("expected send_file");
+    expect(frame.file.filename).toBe("a.png");
+    expect(frame.caption).toBe("here");
+  });
+
+  it("rejects a send_file frame with an empty file payload", () => {
+    expect(() =>
+      sessionToHubFrameSchema.parse({
+        type: "send_file",
+        room: "-100",
+        file: { filename: "", mimeType: "image/png", dataBase64: "AAAA" },
+      }),
+    ).toThrow();
+  });
+
   it("rejects an unknown frame type", () => {
     expect(() =>
       sessionToHubFrameSchema.parse({ type: "nope" }),
@@ -63,6 +85,25 @@ describe("hub→session frames", () => {
     if (frame.type !== "inbound") throw new Error("expected inbound");
     expect(frame.coordinationThread).toBe("t-1");
     expect(frame.message.mentions).toEqual(["re-infra"]);
+    expect(frame.file).toBeUndefined();
+  });
+
+  it("parses an inbound frame carrying a file payload", () => {
+    const frame = hubToSessionFrameSchema.parse({
+      type: "inbound",
+      message: {
+        adapter: "telegram",
+        room: "-100",
+        fromKind: "human",
+        fromId: "42",
+        text: "@re-infra see this",
+        mentions: ["re-infra"],
+        attachments: ["shot.png"],
+      },
+      file: { filename: "shot.png", mimeType: "image/png", dataBase64: "AAAA" },
+    });
+    if (frame.type !== "inbound") throw new Error("expected inbound");
+    expect(frame.file?.filename).toBe("shot.png");
   });
 
   it("defaults error.fatal to false and validates the code enum", () => {

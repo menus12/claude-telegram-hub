@@ -182,6 +182,8 @@ export const channelConfigSchema = z.object({
   /** Reconnect backoff bounds for the hub link. */
   reconnectInitialMs: z.number().int().positive().default(500),
   reconnectMaxMs: z.number().int().positive().default(15000),
+  /** Max size (MB) of a file this session will send out through the hub. */
+  maxFileMb: z.number().int().positive().default(50),
 });
 export type ChannelConfig = z.infer<typeof channelConfigSchema>;
 
@@ -192,6 +194,7 @@ export const CHANNEL_ENV = {
   logLevel: "TELEGRAM_HUB_LOG_LEVEL",
   reconnectInitialMs: "TELEGRAM_HUB_RECONNECT_INITIAL_MS",
   reconnectMaxMs: "TELEGRAM_HUB_RECONNECT_MAX_MS",
+  maxFileMb: "TELEGRAM_HUB_MAX_FILE_MB",
 } as const;
 
 /**
@@ -212,6 +215,7 @@ export function channelEnvLayer(env: Env): ChannelConfigLayer {
     logLevel: env[CHANNEL_ENV.logLevel],
     reconnectInitialMs: env[CHANNEL_ENV.reconnectInitialMs],
     reconnectMaxMs: env[CHANNEL_ENV.reconnectMaxMs],
+    maxFileMb: env[CHANNEL_ENV.maxFileMb],
   };
 }
 
@@ -239,6 +243,7 @@ export function resolveChannelConfig(
       logLevel: pick("logLevel"),
       reconnectInitialMs: num(pick("reconnectInitialMs")),
       reconnectMaxMs: num(pick("reconnectMaxMs")),
+      maxFileMb: num(pick("maxFileMb")),
     },
     "channel",
   );

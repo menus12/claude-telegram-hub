@@ -52,3 +52,29 @@ export const outboundMessageSchema = z.object({
   kind: z.enum(["reply", "notice"]).default("reply"),
 });
 export type OutboundMessage = z.infer<typeof outboundMessageSchema>;
+
+/**
+ * A file carried over the session↔hub link as bytes. The channel is always
+ * co-located with its session, so it is what materializes an inbound file to a
+ * local path (and reads a local path for an outbound one) — the hub only moves
+ * bytes. This keeps file transfer working whether the hub is co-located or remote.
+ * `dataBase64` is the raw file base64-encoded; size is bounded per deployment.
+ */
+export const filePayloadSchema = z.object({
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  dataBase64: z.string().min(1),
+});
+export type FilePayload = z.infer<typeof filePayloadSchema>;
+
+/**
+ * A file leaving the hub through an adapter: the speaking agent (for caption
+ * attribution), the bytes, and an optional caption. The adapter chooses how to
+ * present it (e.g. Telegram photo vs document) from the file's mime/size.
+ */
+export const outboundFileSchema = z.object({
+  agent: z.string().min(1),
+  file: filePayloadSchema,
+  caption: z.string().optional(),
+});
+export type OutboundFile = z.infer<typeof outboundFileSchema>;

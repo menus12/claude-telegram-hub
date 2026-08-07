@@ -95,6 +95,26 @@ interface InboundMessage {
   grace window with no live session — so a session restart (a displace-then-detach plus a
   reconnect) doesn't flap. The notices are hub-generated and governor-neutral (not agent→agent hops).
 
+## Files & images
+
+Text isn't the only payload. An operator's photo/document (with a caption that tags an agent) and
+an agent's outbound file both travel as **bytes over the session↔hub WebSocket** — the same link
+that already carries messages — so file transfer works whether the hub is co-located or remote:
+
+- **Inbound.** The hub (which holds the bot token) downloads the file from the platform, then
+  streams the bytes to the tagged session's channel. The **channel** — always co-located with its
+  session — writes them to a local temp file and surfaces that path (`attachment_path`) to the
+  agent, which opens it with its normal file tools. Routing is unchanged: the caption is treated as
+  the message text, so an untagged file isn't delivered. Files over the Bot API's 20 MB download
+  limit aren't fetched; the agent gets the caption plus a note.
+- **Outbound.** The agent calls the channel's `send_file` tool with a local path (+ optional
+  caption). The channel reads the bytes and sends them through the hub; the adapter uploads them —
+  as a photo for small images, otherwise a document (preserving the file, up to ~50 MB). Captions
+  are attributed like replies.
+
+Files are human-facing: there is no agent→agent file re-injection, and file sends don't touch the
+loop governor.
+
 ## Agent-to-agent coordination
 
 The platform will **not** deliver one bot's message to another bot (see constraints). The hub

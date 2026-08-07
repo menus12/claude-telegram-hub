@@ -1,5 +1,7 @@
 import type {
+  FilePayload,
   InboundMessage,
+  OutboundFile,
   OutboundMessage,
   RouteTarget,
 } from "@claude-telegram-hub/protocol";
@@ -8,6 +10,11 @@ import type { Inbox, TransportAdapter } from "../adapter.js";
 export interface SentMessage {
   target: RouteTarget;
   out: OutboundMessage;
+}
+
+export interface SentFile {
+  target: RouteTarget;
+  out: OutboundFile;
 }
 
 /**
@@ -19,6 +26,7 @@ export interface SentMessage {
 export class LoopbackAdapter implements TransportAdapter {
   readonly name = "loopback";
   readonly sent: SentMessage[] = [];
+  readonly sentFiles: SentFile[] = [];
   private inbox: Inbox | undefined;
   private waiters: Array<{
     pred: (s: SentMessage) => boolean;
@@ -43,15 +51,20 @@ export class LoopbackAdapter implements TransportAdapter {
     return Promise.resolve();
   }
 
+  sendFile(target: RouteTarget, out: OutboundFile): Promise<void> {
+    this.sentFiles.push({ target, out });
+    return Promise.resolve();
+  }
+
   stop(): Promise<void> {
     this.inbox = undefined;
     return Promise.resolve();
   }
 
-  /** Simulate a platform message arriving at the hub. */
-  deliver(message: InboundMessage): Promise<void> {
+  /** Simulate a platform message arriving at the hub (optionally with a file). */
+  deliver(message: InboundMessage, file?: FilePayload): Promise<void> {
     if (!this.inbox) throw new Error("loopback adapter not started");
-    return this.inbox(message);
+    return this.inbox(message, file);
   }
 
   /** Resolve with the next outbound matching `pred` (or the next one at all). */

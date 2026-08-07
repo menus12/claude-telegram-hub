@@ -1,6 +1,38 @@
-import { Bot } from "grammy";
+import { Bot, InputFile } from "grammy";
+import type { Message } from "grammy/types";
 import type { Logger } from "../../logger.js";
-import type { SendOptions, TelegramApi, TgMessage } from "./types.js";
+import type {
+  OutgoingFile,
+  SendFileOptions,
+  SendOptions,
+  TelegramApi,
+  TgAttachment,
+  TgMessage,
+} from "./types.js";
+
+/** Extract a normalized attachment from a Telegram message, if it carries one. */
+function attachmentOf(msg: Message): TgAttachment | undefined {
+  if (msg.photo && msg.photo.length > 0) {
+    // photo is an array of sizes; the last is the largest.
+    const largest = msg.photo[msg.photo.length - 1];
+    return {
+      fileId: largest.file_id,
+      filename: `photo_${msg.message_id}.jpg`,
+      mimeType: "image/jpeg",
+      ...(largest.file_size !== undefined ? { fileSize: largest.file_size } : {}),
+    };
+  }
+  if (msg.document) {
+    const d = msg.document;
+    return {
+      fileId: d.file_id,
+      filename: d.file_name ?? `document_${msg.message_id}`,
+      mimeType: d.mime_type ?? "application/octet-stream",
+      ...(d.file_size !== undefined ? { fileSize: d.file_size } : {}),
+    };
+  }
+  return undefined;
+}
 
 /**
  * grammY-backed {@link TelegramApi}. This is the only file that touches grammY;
@@ -12,7 +44,7 @@ export class GrammyApi implements TelegramApi {
   private readonly bot: Bot;
 
   constructor(
-    token: string,
+    private readonly token: string,
     private readonly logger?: Logger,
   ) {
     this.bot = new Bot(token);
@@ -22,16 +54,23 @@ export class GrammyApi implements TelegramApi {
   }
 
   onMessage(handler: (msg: TgMessage) => void): void {
-    this.bot.on("message:text", (ctx) => {
+    // One handler for every message type; text, caption, and photo/document
+    // attachments are normalized here. Unsupported types yield a message with
+    // none of these, which normalization drops.
+    this.bot.on("message", (ctx) => {
+      const m = ctx.message;
+      const attachment = attachmentOf(m);
       const msg: TgMessage = {
-        message_id: ctx.message.message_id,
+        message_id: m.message_id,
         chat: { id: ctx.chat.id, type: ctx.chat.type },
-        text: ctx.message.text,
         from: ctx.from
           ? { id: ctx.from.id, is_bot: ctx.from.is_bot, username: ctx.from.username }
           : undefined,
-        ...(ctx.message.reply_to_message
-          ? { reply_to_message: { message_id: ctx.message.reply_to_message.message_id } }
+        ...(m.text !== undefined ? { text: m.text } : {}),
+        ...(m.caption !== undefined ? { caption: m.caption } : {}),
+        ...(attachment ? { attachment } : {}),
+        ...(m.reply_to_message
+          ? { reply_to_message: { message_id: m.reply_to_message.message_id } }
           : {}),
       };
       handler(msg);
@@ -55,6 +94,53 @@ export class GrammyApi implements TelegramApi {
   ): Promise<number | undefined> {
     const sent = await this.bot.api.sendMessage(chatId, text, {
       ...(opts?.parseMode ? { parse_mode: opts.parseMode } : {}),
+      ...(opts?.replyToMessageId
+        ? { reply_parameters: { message_id: opts.replyToMessageId } }
+        : {}),
+    });
+    return sent.message_id;
+  }
+
+  async downloadFile(fileId: string): Promise<Buffer | undefined> {
+    try {
+      const file = await this.bot.api.getFile(fileId);
+      if (!file.file_path) return undefined;
+      // The file download URL carries the bot token, so it never leaves the hub —
+      // the hub fetches the bytes here and streams them to the session's channel.
+      const url = `https://api.telegram.org/file/bot${this.token}/${file.file_path}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        this.logger?.("warn", "telegram file download failed", { status: res.status });
+        return undefined;
+      }
+      return Buffer.from(await res.arrayBuffer());
+    } catch (err) {
+      this.logger?.("warn", "telegram getFile failed", { error: String(err) });
+      return undefined;
+    }
+  }
+
+  async sendPhoto(
+    chatId: string,
+    file: OutgoingFile,
+    opts?: SendFileOptions,
+  ): Promise<number | undefined> {
+    const sent = await this.bot.api.sendPhoto(chatId, new InputFile(file.bytes, file.filename), {
+      ...(opts?.caption ? { caption: opts.caption } : {}),
+      ...(opts?.replyToMessageId
+        ? { reply_parameters: { message_id: opts.replyToMessageId } }
+        : {}),
+    });
+    return sent.message_id;
+  }
+
+  async sendDocument(
+    chatId: string,
+    file: OutgoingFile,
+    opts?: SendFileOptions,
+  ): Promise<number | undefined> {
+    const sent = await this.bot.api.sendDocument(chatId, new InputFile(file.bytes, file.filename), {
+      ...(opts?.caption ? { caption: opts.caption } : {}),
       ...(opts?.replyToMessageId
         ? { reply_parameters: { message_id: opts.replyToMessageId } }
         : {}),

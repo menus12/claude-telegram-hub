@@ -28,6 +28,7 @@ function channelConfig(url: string, agent: string): ChannelConfig {
     logLevel: "error",
     reconnectInitialMs: 30,
     reconnectMaxMs: 120,
+    maxFileMb: 50,
   };
 }
 

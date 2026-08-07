@@ -8,6 +8,7 @@ import {
   type HubToSessionFrame,
   type RegisterFrame,
   type ReplyFrame,
+  type SendFileFrame,
 } from "@claude-telegram-hub/protocol";
 import type { AgentRegistry } from "./registry.js";
 import { Session } from "./session.js";
@@ -19,6 +20,8 @@ export interface SessionServerOptions {
   sessionSecret: string;
   registry: AgentRegistry;
   onReply: (agent: string, reply: ReplyFrame) => void;
+  /** A session wants a file delivered out to a room. */
+  onSendFile?: (agent: string, frame: SendFileFrame) => void;
   /** A session for `agent` just registered (fired after the registry is updated). */
   onRegister?: (agent: string) => void;
   /** A session for `agent` just detached (fired after the registry is updated). */
@@ -127,6 +130,9 @@ export class SessionServer {
       switch (frame.type) {
         case "reply":
           this.opts.onReply(session.agent, frame);
+          break;
+        case "send_file":
+          this.opts.onSendFile?.(session.agent, frame);
           break;
         case "heartbeat":
         case "register":

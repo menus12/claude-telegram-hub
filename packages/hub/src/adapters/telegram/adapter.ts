@@ -1,17 +1,29 @@
-import { renderOutbound } from "@claude-telegram-hub/protocol";
-import type { OutboundMessage, RouteTarget } from "@claude-telegram-hub/protocol";
+import { attributionPrefix, renderOutbound } from "@claude-telegram-hub/protocol";
+import type {
+  FilePayload,
+  InboundMessage,
+  OutboundFile,
+  OutboundMessage,
+  RouteTarget,
+} from "@claude-telegram-hub/protocol";
 import type { Inbox, TransportAdapter } from "../../adapter.js";
 import type { Logger } from "../../logger.js";
 import { toTelegramMarkdown } from "./format.js";
 import { toInboundMessage } from "./normalize.js";
 import { ReplyIndex } from "./reply-index.js";
-import type { SendOptions, TelegramApi, TgMessage } from "./types.js";
+import type { SendFileOptions, SendOptions, TelegramApi, TgAttachment, TgMessage } from "./types.js";
 
 /** True when a Telegram error is a MarkdownV2 entity-parse failure. */
 function isParseError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /can't parse entities|parse entities|character.*must be escaped/i.test(msg);
 }
+
+const MB = 1024 * 1024;
+/** Bot API getFile caps downloads at 20 MB — larger inbound files can't be fetched. */
+const INBOUND_MAX_BYTES = 20 * MB;
+/** sendPhoto caps at ~10 MB; larger images go as documents (which preserve them). */
+const PHOTO_MAX_BYTES = 10 * MB;
 
 export interface TelegramAdapterOptions {
   api: TelegramApi;
@@ -73,6 +85,25 @@ export class TelegramAdapter implements TransportAdapter {
     }
   }
 
+  async sendFile(target: RouteTarget, out: OutboundFile): Promise<void> {
+    const bytes = Buffer.from(out.file.dataBase64, "base64");
+    const filename = out.file.filename;
+    // Caption carries the speaking agent's attribution; sent plain (no parse mode).
+    const captionText = out.caption ?? filename;
+    const opts: SendFileOptions = {
+      caption: `${attributionPrefix(out.agent)}${captionText}`,
+      ...(target.replyToId ? { replyToMessageId: Number(target.replyToId) } : {}),
+    };
+    // Images go as photos when small enough; everything else (and large images) as
+    // documents, which preserve the original file and allow up to ~50 MB.
+    const asPhoto = out.file.mimeType.startsWith("image/") && bytes.length <= PHOTO_MAX_BYTES;
+    if (asPhoto) {
+      await this.opts.api.sendPhoto(target.room, { bytes, filename }, opts);
+    } else {
+      await this.opts.api.sendDocument(target.room, { bytes, filename }, opts);
+    }
+  }
+
   async stop(): Promise<void> {
     await this.opts.api.stop();
     this.inbox = undefined;
@@ -85,10 +116,49 @@ export class TelegramAdapter implements TransportAdapter {
     if (!message) return;
     const inbox = this.inbox;
     if (!inbox) return;
-    void inbox(message).catch((err: unknown) => {
+    // Only fetch an attachment's bytes when the message is actually routed
+    // (tagged an agent) — an untagged file is dropped by the hub anyway, so
+    // there's no point downloading up to 20 MB for it.
+    const wantsFile = msg.attachment !== undefined && message.mentions.length > 0;
+    const deliver = wantsFile
+      ? this.resolveFile(msg.attachment as TgAttachment, message).then((file) =>
+          inbox(message, file),
+        )
+      : inbox(message);
+    void deliver.catch((err: unknown) => {
       this.opts.logger?.("warn", "failed to hand inbound to hub", {
         error: String(err),
       });
     });
   }
+
+  /**
+   * Fetch an attachment's bytes into a `FilePayload`. If it's over the Bot API's
+   * 20 MB download limit, or the fetch fails, annotate the message text with a note
+   * (so the agent still sees the caption + knows a file was there) and deliver no file.
+   */
+  private async resolveFile(
+    att: TgAttachment,
+    message: InboundMessage,
+  ): Promise<FilePayload | undefined> {
+    if (att.fileSize !== undefined && att.fileSize > INBOUND_MAX_BYTES) {
+      message.text = annotate(message.text, `attachment "${att.filename}" is too large to fetch (> 20 MB)`);
+      return undefined;
+    }
+    const bytes = await this.opts.api.downloadFile(att.fileId);
+    if (!bytes) {
+      message.text = annotate(message.text, `attachment "${att.filename}" could not be fetched`);
+      return undefined;
+    }
+    return {
+      filename: att.filename,
+      mimeType: att.mimeType,
+      dataBase64: bytes.toString("base64"),
+    };
+  }
+}
+
+/** Append a bracketed note to message text (keeps any caption the operator sent). */
+function annotate(text: string, note: string): string {
+  return text ? `${text}\n[${note}]` : `[${note}]`;
 }

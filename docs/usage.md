@@ -118,6 +118,7 @@ and the hub logs `session registered {agent: "re-infra"}`.
 - **DM** — message the bot `@re-infra <text>`. It surfaces in that session; the reply returns to your DM, attributed `re-infra ▸ …`.
 - **Group** — in a group the bot administers, `@re-infra <text>` routes to that agent; a human may tag several agents and each replies into the group.
 - **Reply to address** — Telegram-**reply** to an agent's message to route your follow-up to that agent, no `@tag` needed. Reply-to and `@tags` compose (a reply that also tags `@other` reaches both). The hub tracks which agent authored each sent message for this.
+- **Files & images** — send a photo/document to an agent by attaching it with a caption that tags the agent (`@re-infra` in the caption); the hub downloads it, streams the bytes to that session, and the agent gets a **local path** to open. An agent sends a file back with the `send_file` tool (a local path + optional caption); it arrives in the chat as a photo (images) or document. Bytes travel over the session↔hub WebSocket, so this works with a co-located **or** remote hub. Limits: 20 MB inbound (Bot API), ~50 MB outbound documents.
 - **Multi-agent** — run one session per project, each with a distinct `TELEGRAM_HUB_AGENT`. In the shared group:
   - Tag several agents → each tagged, connected agent gets it.
   - An agent can **tag another agent** (`@other-agent …`) in its reply — the platform never carries bot→bot, so the hub **re-injects** the hop into the peer's session and posts a visible copy to the group.

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { inboundMessageSchema } from "./messages.js";
+import { filePayloadSchema, inboundMessageSchema } from "./messages.js";
 
 /**
  * The session↔hub wire protocol.
@@ -36,6 +36,19 @@ export const replyFrameSchema = z.object({
 });
 export type ReplyFrame = z.infer<typeof replyFrameSchema>;
 
+/**
+ * A file the session wants delivered out to a room (agent → operator/room). The
+ * channel reads the agent's local file and sends the bytes here; the hub hands
+ * them to the adapter to upload. Files are human-facing — no agent→agent routing.
+ */
+export const sendFileFrameSchema = z.object({
+  type: z.literal("send_file"),
+  room: z.string().min(1),
+  file: filePayloadSchema,
+  caption: z.string().optional(),
+});
+export type SendFileFrame = z.infer<typeof sendFileFrameSchema>;
+
 /** Liveness keepalive; the hub may use it to detect dead sessions. */
 export const heartbeatFrameSchema = z.object({
   type: z.literal("heartbeat"),
@@ -45,6 +58,7 @@ export type HeartbeatFrame = z.infer<typeof heartbeatFrameSchema>;
 export const sessionToHubFrameSchema = z.discriminatedUnion("type", [
   registerFrameSchema,
   replyFrameSchema,
+  sendFileFrameSchema,
   heartbeatFrameSchema,
 ]);
 export type SessionToHubFrame = z.infer<typeof sessionToHubFrameSchema>;
@@ -69,6 +83,13 @@ export const inboundFrameSchema = z.object({
   type: z.literal("inbound"),
   message: inboundMessageSchema,
   coordinationThread: z.string().optional(),
+  /**
+   * File bytes accompanying the message (an operator photo/document). Present only
+   * when the inbound carried an attachment; the channel materializes it to a local
+   * path for the session. `message.text` holds any caption; `message.attachments`
+   * names the file.
+   */
+  file: filePayloadSchema.optional(),
 });
 export type InboundFrame = z.infer<typeof inboundFrameSchema>;
 
