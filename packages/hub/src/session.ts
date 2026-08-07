@@ -18,6 +18,34 @@ export class Session {
     }
   }
 
+  /**
+   * Probe liveness with a WebSocket ping, resolving `true` if a pong returns
+   * within `timeoutMs`. Used to tell a real duplicate registration (incumbent
+   * pongs) from a restart whose old socket is half-open (no pong → dead). The
+   * `ws` client answers pings automatically, so this needs no protocol frame.
+   */
+  isAlive(timeoutMs: number): Promise<boolean> {
+    if (this.ws.readyState !== WebSocket.OPEN) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (alive: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.ws.off("pong", onPong);
+        resolve(alive);
+      };
+      const onPong = (): void => finish(true);
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      this.ws.once("pong", onPong);
+      try {
+        this.ws.ping();
+      } catch {
+        finish(false);
+      }
+    });
+  }
+
   close(): void {
     this.ws.close();
   }

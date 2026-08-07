@@ -93,6 +93,13 @@ export const hubConfigSchema = z.object({
   ackSlaMs: z.number().int().positive().default(120000),
   /** T2: silence before the hub escalates to the operator and unblocks the asker. */
   answerSlaMs: z.number().int().positive().default(600000),
+  /**
+   * What to do when a second session registers under a name a live session already
+   * holds. `reject` (default) keeps the incumbent and rejects the newcomer (with a
+   * room notice); `replace` restores the old take-over behavior. A dead/half-open
+   * incumbent is always taken over regardless, so a genuine restart still attaches.
+   */
+  duplicateName: z.enum(["reject", "replace"]).default("reject"),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -119,6 +126,7 @@ export const HUB_ENV = {
   sla: "HUB_SLA",
   ackSlaMs: "HUB_ACK_SLA",
   answerSlaMs: "HUB_ANSWER_SLA",
+  duplicateName: "HUB_DUPLICATE_NAME",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -139,6 +147,7 @@ export function loadHubConfig(env: Env): HubConfig {
       sla: bool(env[HUB_ENV.sla]),
       ackSlaMs: num(env[HUB_ENV.ackSlaMs]),
       answerSlaMs: num(env[HUB_ENV.answerSlaMs]),
+      duplicateName: env[HUB_ENV.duplicateName],
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),

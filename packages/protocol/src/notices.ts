@@ -69,6 +69,21 @@ export function slaEscalationNotice(from: string, to: string, minutes: number): 
 }
 
 /**
+ * The in-room notice posted when a second session tries to register under a name
+ * an already-live session holds. The incumbent keeps the name; the newcomer is
+ * rejected — this surfaces the collision so the operator can fix the duplicate.
+ */
+export function duplicateRegistrationNotice(agent: string): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text:
+      `⚠️ a second session tried to register as @${agent} and was rejected — ` +
+      `the existing session keeps the name.`,
+  };
+}
+
+/**
  * The in-room notice posted when a coordination thread's hop budget is exhausted
  * and the hub freezes agent→agent routing. A human message resumes the thread.
  */

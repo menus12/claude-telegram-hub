@@ -1,4 +1,5 @@
 import {
+  duplicateRegistrationNotice,
   loopFrozenNotice,
   offlineTargetNotice,
   slaEscalationNotice,
@@ -87,6 +88,8 @@ export class Hub {
       onSendFile: (agent, frame) => this.onSendFile(agent, frame),
       onRegister: (agent) => this.presence?.onConnect(agent),
       onDetach: (agent) => this.presence?.onDetach(agent),
+      onDuplicateRejected: (agent) => this.postToRooms(duplicateRegistrationNotice(agent)),
+      duplicateName: deps.config.duplicateName,
       isReady: () => this.started,
       logger: deps.logger,
     });

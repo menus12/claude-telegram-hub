@@ -19,6 +19,7 @@ describe("loadHubConfig", () => {
     expect(cfg.sla).toBe(false);
     expect(cfg.ackSlaMs).toBe(120000);
     expect(cfg.answerSlaMs).toBe(600000);
+    expect(cfg.duplicateName).toBe("reject");
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
@@ -61,6 +62,15 @@ describe("loadHubConfig", () => {
     expect(() =>
       loadHubConfig({ ...minimal, HUB_ACK_SLA: "300000", HUB_ANSWER_SLA: "120000" }),
     ).toThrow(/answerSlaMs/);
+  });
+
+  it("reads the duplicate-name policy and rejects an unknown value", () => {
+    expect(loadHubConfig({ ...minimal, HUB_DUPLICATE_NAME: "replace" }).duplicateName).toBe(
+      "replace",
+    );
+    expect(() => loadHubConfig({ ...minimal, HUB_DUPLICATE_NAME: "takeover" })).toThrow(
+      /duplicateName/,
+    );
   });
 
   it("parses csv lists and coerces numeric ports/budgets", () => {

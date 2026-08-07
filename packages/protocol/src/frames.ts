@@ -100,6 +100,7 @@ export const errorCodeSchema = z.enum([
   "unknown_agent",
   "not_allowlisted",
   "bad_request",
+  "name_in_use",
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 

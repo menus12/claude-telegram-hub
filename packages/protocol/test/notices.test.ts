@@ -7,6 +7,7 @@ import {
   presenceOnlineNotice,
   presenceOfflineNotice,
   slaEscalationNotice,
+  duplicateRegistrationNotice,
 } from "../src/index.js";
 
 describe("attribution", () => {
@@ -49,5 +50,11 @@ describe("hub notices", () => {
     expect(n.text).toContain("@re-infra");
     expect(n.text).toContain("@re-gitops");
     expect(n.text).toContain("10 min");
+  });
+
+  it("builds a duplicate-registration notice naming the agent", () => {
+    const n = duplicateRegistrationNotice("re-infra");
+    expect(n).toMatchObject({ agent: "hub", kind: "notice" });
+    expect(n.text).toContain("@re-infra");
   });
 });

@@ -78,6 +78,12 @@ interface InboundMessage {
 - **Sessions register with the hub** over a local channel (unix socket or localhost HTTP),
   declaring their agent name (derived from the repo, e.g. the working-directory basename) and
   a shared secret. The hub maps `agent name ↔ live session`.
+- **One live session per name (no split-brain).** If a second session registers under a name a
+  **live** session already holds, the hub (default `HUB_DUPLICATE_NAME=reject`) keeps the incumbent,
+  rejects the newcomer with a fatal `name_in_use` error, and posts a room notice. It tells a real
+  duplicate from a restart by actively pinging the incumbent: a genuine restart's old socket is
+  half-open and fails the ping, so it's taken over and the reconnect attaches. `replace` restores
+  the old newcomer-wins behavior.
 - **Routing is by `@tag`, uniformly.** The hub parses every inbound message for agent tags and
   delivers only to tagged agents — human→agent and agent→agent use the same path. Untagged
   chatter is not injected (explicit-mention-only, to bound noise and loops).
