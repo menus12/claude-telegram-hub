@@ -18,6 +18,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_ALLOWLIST` | csv | — (**required**, ≥1) | Platform user ids allowed to talk to the hub; unknown senders dropped. |
 | `HUB_ROOMS` | csv | `[]` | Group room ids the hub operates in. Empty is valid (DM-only). |
 | `HUB_HOP_BUDGET` | int | `6` | Coordination-thread hops before agent→agent routing freezes. |
+| `HUB_BROADCAST` | bool | `true` | Operator `@all`/`@everyone`/`@team` expands to every live agent. Off → treated as ordinary names. Agents can't broadcast regardless. |
 | `HUB_PRESENCE` | bool | `false` | Announce `@agent online/offline`. Opt-in. Accepts `on/off`, `true/false`, `1/0`, `yes/no`. |
 | `HUB_NOTIFY` | enum | `dm` | Where hub-wide notices (presence, duplicate-registration) go: `dm` (admins' DMs — works with no group), `rooms` (`HUB_ROOMS`), or `both`. |
 | `HUB_PRESENCE_GRACE_MS` | int | `10000` | Grace window a dropped session may reconnect within before it's announced offline (absorbs restart churn). |

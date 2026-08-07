@@ -88,6 +88,13 @@ interface InboundMessage {
 - **Routing is by `@tag`, uniformly.** The hub parses every inbound message for agent tags and
   delivers only to tagged agents — human→agent and agent→agent use the same path. Untagged
   chatter is not injected (explicit-mention-only, to bound noise and loops).
+- **Recipients are a set; the cardinality is the "cast".** `@a` (unicast), `@a @b` (multicast), and
+  `@all` (broadcast) are the same delivery path over a resolved recipient set — there is no separate
+  mode. Broadcast (`@all`/`@everyone`/`@team`, `HUB_BROADCAST`, default on) is an **operator-only**
+  primitive the hub expands to every *live* agent; agents can't broadcast (the token is dropped from
+  an agent's reply), so one message can't fan out the room. This set-resolution is also the seam
+  voice addressing plugs into (a transcript resolves to the same recipient set — see
+  [design/voice-messages.md](design/voice-messages.md)).
 - **A Telegram reply is an equivalent addressing signal.** Since the one bot posts every agent's
   messages, a reply to one is resolved to its author and added to the message's mentions, so hub
   routing stays tag-based. Resolution has two layers: a bounded in-memory `message_id → agent`

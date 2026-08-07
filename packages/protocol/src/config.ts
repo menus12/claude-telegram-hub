@@ -76,6 +76,12 @@ export const hubConfigSchema = z.object({
   rooms: z.array(z.string().min(1)).default([]),
   /** Coordination-thread hop budget before agent→agent routing freezes. */
   hopBudget: z.number().int().positive().default(6),
+  /**
+   * Enable the operator broadcast primitive: `@all` (and `@everyone`/`@team`)
+   * from a human expands to every live agent in the room. Off → those are treated
+   * as ordinary agent names. Agents can't broadcast regardless.
+   */
+  broadcast: z.boolean().default(true),
   /** Announce agent online/offline in the configured rooms. Off by default. */
   presence: z.boolean().default(false),
   /**
@@ -142,6 +148,7 @@ export const HUB_ENV = {
   allowlist: "HUB_ALLOWLIST",
   rooms: "HUB_ROOMS",
   hopBudget: "HUB_HOP_BUDGET",
+  broadcast: "HUB_BROADCAST",
   presence: "HUB_PRESENCE",
   presenceGraceMs: "HUB_PRESENCE_GRACE_MS",
   sla: "HUB_SLA",
@@ -167,6 +174,7 @@ export function loadHubConfig(env: Env): HubConfig {
       allowlist: csv(env[HUB_ENV.allowlist]),
       rooms: csv(env[HUB_ENV.rooms]),
       hopBudget: num(env[HUB_ENV.hopBudget]),
+      broadcast: bool(env[HUB_ENV.broadcast]),
       presence: bool(env[HUB_ENV.presence]),
       presenceGraceMs: num(env[HUB_ENV.presenceGraceMs]),
       sla: bool(env[HUB_ENV.sla]),

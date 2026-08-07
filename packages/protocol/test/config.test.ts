@@ -14,6 +14,7 @@ describe("loadHubConfig", () => {
     expect(cfg.allowlist).toEqual(["1", "2"]);
     expect(cfg.rooms).toEqual([]);
     expect(cfg.hopBudget).toBe(6);
+    expect(cfg.broadcast).toBe(true);
     expect(cfg.presence).toBe(false);
     expect(cfg.presenceGraceMs).toBe(10000);
     expect(cfg.sla).toBe(false);
