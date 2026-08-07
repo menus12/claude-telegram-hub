@@ -4,6 +4,7 @@ import {
   offlineTargetNotice,
   slaEscalationNotice,
 } from "@claude-telegram-hub/protocol";
+import { isBroadcastMention } from "@claude-telegram-hub/protocol";
 import type {
   FilePayload,
   HubConfig,
@@ -55,6 +56,7 @@ export class Hub {
   private readonly access: AccessController;
   private readonly pairing: boolean;
   private readonly notifyTarget: "dm" | "rooms" | "both";
+  private readonly broadcast: boolean;
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
@@ -72,6 +74,7 @@ export class Hub {
     });
     this.pairing = deps.config.pairing;
     this.notifyTarget = deps.config.notify;
+    this.broadcast = deps.config.broadcast;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -313,6 +316,16 @@ export class Hub {
     // license to continue), unfreezing agent↔agent routing there.
     this.governor.refill(message.room);
 
+    // Operator broadcast: `@all` from a human expands to every live agent, so
+    // unicast/multicast/broadcast are all just "route to a set" downstream.
+    if (message.fromKind === "human" && this.hasBroadcast(message.mentions)) {
+      message.mentions = this.expandBroadcast(message.mentions);
+      this.deps.logger("info", "broadcast expanded to live agents", {
+        room: message.room,
+        recipients: message.mentions.length,
+      });
+    }
+
     // Explicit-mention-only routing: untagged chatter is not injected.
     if (message.mentions.length === 0) {
       this.deps.logger("debug", "no mentions; not routing", { room: message.room });
@@ -321,6 +334,17 @@ export class Hub {
 
     // Human→agent delivery is never frozen — only agent→agent hops are bounded.
     await this.routeToMentioned(message, file);
+  }
+
+  /** Whether the mention set carries an enabled broadcast token (`@all`, …). */
+  private hasBroadcast(mentions: string[]): boolean {
+    return this.broadcast && mentions.some(isBroadcastMention);
+  }
+
+  /** Expand a broadcast mention set to every live agent, keeping any explicit names. */
+  private expandBroadcast(mentions: string[]): string[] {
+    const explicit = mentions.filter((m) => !isBroadcastMention(m));
+    return [...new Set([...this.registry.list(), ...explicit])];
   }
 
   /** session → hub → adapter: deliver an agent's file out to a room. */
@@ -355,8 +379,13 @@ export class Hub {
 
     // 2) Agent↔agent: re-inject the hop into any tagged peer agents, bounded by
     // the loop governor. The platform never delivers bot→bot, so the hub carries
-    // it; the human already sees the visible copy posted above.
-    const peers = reply.mentions.filter((m) => m !== agent);
+    // it; the human already sees the visible copy posted above. Broadcast is an
+    // operator-only primitive — drop any broadcast token from an agent's mentions
+    // so a single reply can't fan out to the whole room.
+    const mentions = this.broadcast
+      ? reply.mentions.filter((m) => !isBroadcastMention(m))
+      : reply.mentions;
+    const peers = mentions.filter((m) => m !== agent);
     if (peers.length > 0) {
       const decision = this.governor.onAgentHop(reply.room);
       if (!decision.allowed) {
@@ -372,7 +401,7 @@ export class Hub {
         fromKind: "agent",
         fromId: agent,
         text: reply.text,
-        mentions: reply.mentions,
+        mentions,
       };
       void this.routeToMentioned(reinjected).catch((err: unknown) => {
         this.deps.logger("warn", "re-injection failed", { error: String(err) });

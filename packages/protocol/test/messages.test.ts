@@ -1,9 +1,20 @@
 import { describe, it, expect } from "vitest";
 import {
   inboundMessageSchema,
+  isBroadcastMention,
   outboundMessageSchema,
   routeTargetSchema,
 } from "../src/index.js";
+
+describe("isBroadcastMention", () => {
+  it("recognizes the reserved broadcast aliases, case-insensitively", () => {
+    expect(isBroadcastMention("all")).toBe(true);
+    expect(isBroadcastMention("Everyone")).toBe(true);
+    expect(isBroadcastMention("TEAM")).toBe(true);
+    expect(isBroadcastMention("re-infra")).toBe(false);
+    expect(isBroadcastMention("allies")).toBe(false);
+  });
+});
 
 describe("inboundMessageSchema", () => {
   it("parses a valid human message and defaults mentions to []", () => {

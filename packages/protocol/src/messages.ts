@@ -9,6 +9,20 @@ export const fromKindSchema = z.enum(["human", "agent"]);
 export type FromKind = z.infer<typeof fromKindSchema>;
 
 /**
+ * Reserved mention tokens that address **all live agents** in the room rather than
+ * a single named agent — the broadcast primitive (`@all …`, or "everyone …" by
+ * voice). Recipients are just a set, so unicast/multicast/broadcast differ only in
+ * cardinality; broadcast is the case where the hub expands the token to the whole
+ * live roster. Case-insensitive; reserved (an agent can't take one of these names)
+ * when broadcast is enabled.
+ */
+export const BROADCAST_ALIASES: ReadonlySet<string> = new Set(["all", "everyone", "team"]);
+
+export function isBroadcastMention(name: string): boolean {
+  return BROADCAST_ALIASES.has(name.toLowerCase());
+}
+
+/**
  * A message arriving at the hub from a transport adapter (or re-injected from
  * another agent), normalized into a transport-agnostic shape. This is what the
  * router reasons about; nothing here is Telegram-specific.
