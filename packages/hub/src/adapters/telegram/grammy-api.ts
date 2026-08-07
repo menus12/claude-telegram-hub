@@ -30,6 +30,9 @@ export class GrammyApi implements TelegramApi {
         from: ctx.from
           ? { id: ctx.from.id, is_bot: ctx.from.is_bot, username: ctx.from.username }
           : undefined,
+        ...(ctx.message.reply_to_message
+          ? { reply_to_message: { message_id: ctx.message.reply_to_message.message_id } }
+          : {}),
       };
       handler(msg);
     });
@@ -45,13 +48,18 @@ export class GrammyApi implements TelegramApi {
     return Promise.resolve();
   }
 
-  async sendMessage(chatId: string, text: string, opts?: SendOptions): Promise<void> {
-    await this.bot.api.sendMessage(chatId, text, {
+  async sendMessage(
+    chatId: string,
+    text: string,
+    opts?: SendOptions,
+  ): Promise<number | undefined> {
+    const sent = await this.bot.api.sendMessage(chatId, text, {
       ...(opts?.parseMode ? { parse_mode: opts.parseMode } : {}),
       ...(opts?.replyToMessageId
         ? { reply_parameters: { message_id: opts.replyToMessageId } }
         : {}),
     });
+    return sent.message_id;
   }
 
   async stop(): Promise<void> {

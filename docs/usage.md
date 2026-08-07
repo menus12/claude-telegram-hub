@@ -117,6 +117,7 @@ and the hub logs `session registered {agent: "re-infra"}`.
 
 - **DM** — message the bot `@re-infra <text>`. It surfaces in that session; the reply returns to your DM, attributed `re-infra ▸ …`.
 - **Group** — in a group the bot administers, `@re-infra <text>` routes to that agent; a human may tag several agents and each replies into the group.
+- **Reply to address** — Telegram-**reply** to an agent's message to route your follow-up to that agent, no `@tag` needed. Reply-to and `@tags` compose (a reply that also tags `@other` reaches both). The hub tracks which agent authored each sent message for this.
 - **Multi-agent** — run one session per project, each with a distinct `TELEGRAM_HUB_AGENT`. In the shared group:
   - Tag several agents → each tagged, connected agent gets it.
   - An agent can **tag another agent** (`@other-agent …`) in its reply — the platform never carries bot→bot, so the hub **re-injects** the hop into the peer's session and posts a visible copy to the group.

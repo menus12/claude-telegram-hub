@@ -71,4 +71,48 @@ describe("toInboundMessage", () => {
     expect(toInboundMessage({ ...base, text: undefined }, "@")).toBeNull();
     expect(toInboundMessage({ ...base, from: undefined }, "@")).toBeNull();
   });
+
+  it("resolves a reply_to_message to an agent mention (no @tag needed)", () => {
+    const reply: TgMessage = {
+      message_id: 8,
+      chat: { id: -100123, type: "supergroup" },
+      from: { id: 42, is_bot: false },
+      text: "ship it",
+      reply_to_message: { message_id: 7 },
+    };
+    const m = toInboundMessage(reply, "@", (room, id) =>
+      room === "-100123" && id === 7 ? "re-infra" : undefined,
+    );
+    expect(m?.mentions).toEqual(["re-infra"]);
+  });
+
+  it("composes a reply target with an explicit @tag, de-duplicating", () => {
+    const reply: TgMessage = {
+      ...base,
+      text: "@re-gitops and you", // explicit tag
+      reply_to_message: { message_id: 7 },
+    };
+    const m = toInboundMessage(reply, "@", () => "re-infra"); // reply target
+    expect(m?.mentions).toEqual(["re-gitops", "re-infra"]);
+  });
+
+  it("does not double-add when the reply target is already @tagged", () => {
+    const reply: TgMessage = {
+      ...base,
+      text: "@re-infra ping",
+      reply_to_message: { message_id: 7 },
+    };
+    const m = toInboundMessage(reply, "@", () => "re-infra");
+    expect(m?.mentions).toEqual(["re-infra"]);
+  });
+
+  it("ignores a reply whose target isn't a known agent message", () => {
+    const reply: TgMessage = {
+      ...base,
+      text: "just replying",
+      reply_to_message: { message_id: 999 },
+    };
+    const m = toInboundMessage(reply, "@", () => undefined);
+    expect(m?.mentions).toEqual([]);
+  });
 });
