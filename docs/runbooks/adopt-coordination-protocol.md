@@ -34,12 +34,13 @@ Do it issue-first, changing only THIS repo's files:
    shared room.
 2. Find anywhere in this repo that restates *general* multi-agent / shared-room coordination rules:
    a local agent-coordination.md, a coordination section in CONTRIBUTING.md or docs/conventions.md,
-   CLAUDE.md, or the agent's own instructions. Replace the general content with a short pointer to
-   the canonical protocol. Keep ONLY what is genuinely repo-specific — this agent's name and domain,
-   which peers it coordinates with, repo-specific ownership/escalation notes. Do not duplicate the
-   rules; link them.
-3. Ensure the agent's instructions (CLAUDE.md / system prompt) *reference* the canonical protocol
-   so every session picks up the latest by reading the link, not by carrying a copy.
+   or wherever this project documents agent behavior in its committed engineering docs. Replace the
+   general content with a short pointer to the canonical protocol. Keep ONLY what is genuinely
+   repo-specific — this agent's name and domain, which peers it coordinates with, repo-specific
+   ownership/escalation notes. Do not duplicate the rules; link them.
+3. Ensure whatever your repo uses to brief its agents (its committed engineering docs) *references*
+   the canonical protocol, so every session picks up the latest by reading the link, not by carrying
+   a copy.
 4. Open an issue ("Reference the central coordination protocol"), branch, and open a PR that links
    it (Closes #N). Merge after review.
 5. Re-read the canonical protocol now, so you are on the current rules immediately.

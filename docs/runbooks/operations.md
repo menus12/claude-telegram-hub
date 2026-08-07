@@ -72,11 +72,16 @@ autonomous exchanges.
 
 ## Presence notices
 
-`HUB_PRESENCE=on` makes the hub post `@agent online/offline` to `HUB_ROOMS` as sessions attach and
-detach (off by default; needs ≥1 room). It's debounced so restart churn doesn't flap: online fires
-on an agent's first live registration, offline only after `HUB_PRESENCE_GRACE_MS` (default 10000)
-elapses with no live session. Raise the grace window if sessions routinely take longer than 10 s to
-reconnect after a restart; lower it for snappier offline signals.
+`HUB_PRESENCE=on` makes the hub announce `@agent online/offline` as sessions attach and detach (off
+by default). It's debounced so restart churn doesn't flap: online fires on an agent's first live
+registration, offline only after `HUB_PRESENCE_GRACE_MS` (default 10000) elapses with no live
+session. Raise the grace window if sessions routinely take longer than 10 s to reconnect after a
+restart; lower it for snappier offline signals.
+
+Delivery of presence (and duplicate-registration) notices follows **`HUB_NOTIFY`**: `dm` (default —
+to admins' DMs, so it works with no group), `rooms` (`HUB_ROOMS`), or `both`. Admins are `HUB_ADMINS`
+(defaulting to the allowlist seed); a Telegram user's DM chat id is their user id, so the hub DMs
+them directly — the recipient must have started the bot.
 
 ## Response SLA
 

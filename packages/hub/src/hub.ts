@@ -54,6 +54,7 @@ export class Hub {
   private readonly server: SessionServer;
   private readonly access: AccessController;
   private readonly pairing: boolean;
+  private readonly notifyTarget: "dm" | "rooms" | "both";
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
@@ -70,6 +71,7 @@ export class Hub {
       logger: deps.logger,
     });
     this.pairing = deps.config.pairing;
+    this.notifyTarget = deps.config.notify;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -80,16 +82,15 @@ export class Hub {
           ...(deps.scheduler ? { schedule: deps.scheduler } : {}),
         })
       : undefined;
-    // Presence announcements are opt-in and only meaningful where there's a room
-    // to post them to; otherwise the tracker is absent and lifecycle hooks no-op.
-    this.presence =
-      deps.config.presence && deps.config.rooms.length > 0
-        ? new PresenceTracker({
-            graceMs: deps.config.presenceGraceMs,
-            isLive: (agent) => this.registry.has(agent),
-            emit: (notice) => this.postToRooms(notice),
-          })
-        : undefined;
+    // Presence is opt-in; delivery goes through notify() (admin DMs and/or rooms),
+    // so it works even with no group configured.
+    this.presence = deps.config.presence
+      ? new PresenceTracker({
+          graceMs: deps.config.presenceGraceMs,
+          isLive: (agent) => this.registry.has(agent),
+          emit: (notice) => this.notify(notice),
+        })
+      : undefined;
     this.server = new SessionServer({
       host: deps.config.bindHost,
       port: deps.config.bindPort,
@@ -99,7 +100,7 @@ export class Hub {
       onSendFile: (agent, frame) => this.onSendFile(agent, frame),
       onRegister: (agent) => this.presence?.onConnect(agent),
       onDetach: (agent) => this.presence?.onDetach(agent),
-      onDuplicateRejected: (agent) => this.postToRooms(duplicateRegistrationNotice(agent)),
+      onDuplicateRejected: (agent) => this.notify(duplicateRegistrationNotice(agent)),
       duplicateName: deps.config.duplicateName,
       isReady: () => this.started,
       logger: deps.logger,
@@ -272,11 +273,22 @@ export class Hub {
       void this.deps.adapter
         .send({ adapter: this.deps.adapter.name, room }, notice)
         .catch((err: unknown) => {
-          this.deps.logger("warn", "presence notice send failed", {
-            room,
-            error: String(err),
-          });
+          this.deps.logger("warn", "room notice send failed", { room, error: String(err) });
         });
+    }
+  }
+
+  /**
+   * Deliver a hub-wide notice (presence, duplicate-registration) to the operator
+   * per `HUB_NOTIFY`: admins' DMs and/or the configured rooms. DM delivery means
+   * these reach the operator even in a DM-only deployment with no group.
+   */
+  private notify(notice: OutboundMessage): void {
+    if (this.notifyTarget === "dm" || this.notifyTarget === "both") {
+      for (const adminId of this.access.adminIds()) this.replyNotice(adminId, notice.text);
+    }
+    if (this.notifyTarget === "rooms" || this.notifyTarget === "both") {
+      this.postToRooms(notice);
     }
   }
 

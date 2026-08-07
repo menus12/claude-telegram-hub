@@ -101,6 +101,12 @@ export const hubConfigSchema = z.object({
    */
   duplicateName: z.enum(["reject", "replace"]).default("reject"),
   /**
+   * Where hub-wide notices (presence, duplicate-registration) go: `dm` to admins'
+   * DMs (works with no group configured), `rooms` to `HUB_ROOMS`, or `both`.
+   * Defaults to `dm` so notices reach the operator regardless of group setup.
+   */
+  notify: z.enum(["dm", "rooms", "both"]).default("dm"),
+  /**
    * Admin user ids permitted to run in-chat allowlist commands (`/allow`, …).
    * Empty means "fall back to the allowlist seed" (resolved by the hub).
    */
@@ -142,6 +148,7 @@ export const HUB_ENV = {
   ackSlaMs: "HUB_ACK_SLA",
   answerSlaMs: "HUB_ANSWER_SLA",
   duplicateName: "HUB_DUPLICATE_NAME",
+  notify: "HUB_NOTIFY",
   admins: "HUB_ADMINS",
   stateFile: "HUB_STATE_FILE",
   pairing: "HUB_PAIRING",
@@ -166,6 +173,7 @@ export function loadHubConfig(env: Env): HubConfig {
       ackSlaMs: num(env[HUB_ENV.ackSlaMs]),
       answerSlaMs: num(env[HUB_ENV.answerSlaMs]),
       duplicateName: env[HUB_ENV.duplicateName],
+      notify: env[HUB_ENV.notify],
       admins: csv(env[HUB_ENV.admins]),
       stateFile: env[HUB_ENV.stateFile],
       pairing: bool(env[HUB_ENV.pairing]),

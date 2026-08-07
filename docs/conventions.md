@@ -80,7 +80,8 @@ interface InboundMessage {
   a shared secret. The hub maps `agent name ↔ live session`.
 - **One live session per name (no split-brain).** If a second session registers under a name a
   **live** session already holds, the hub (default `HUB_DUPLICATE_NAME=reject`) keeps the incumbent,
-  rejects the newcomer with a fatal `name_in_use` error, and posts a room notice. It tells a real
+  rejects the newcomer with a fatal `name_in_use` error, and notifies the operator (per
+  `HUB_NOTIFY`). It tells a real
   duplicate from a restart by actively pinging the incumbent: a genuine restart's old socket is
   half-open and fails the ping, so it's taken over and the reconnect attaches. `replace` restores
   the old newcomer-wins behavior.
@@ -97,11 +98,17 @@ interface InboundMessage {
   speaking agent's name so the group stays legible (e.g. `re-infra ▸ …`).
 - **Offline target.** If a tagged agent has no live session, the hub reports it in the room
   rather than silently dropping.
-- **Presence (opt-in).** With `HUB_PRESENCE` on, the hub posts `@agent online/offline` to the
-  configured rooms as sessions come and go, so the operator can see who's reachable. It's
-  debounced: online fires only on an agent's first live registration, and offline only after a
-  grace window with no live session — so a session restart (a displace-then-detach plus a
-  reconnect) doesn't flap. The notices are hub-generated and governor-neutral (not agent→agent hops).
+- **Presence (opt-in).** With `HUB_PRESENCE` on, the hub announces `@agent online/offline` as
+  sessions come and go, so the operator can see who's reachable. It's debounced: online fires only
+  on an agent's first live registration, and offline only after a grace window with no live session
+  — so a session restart (a displace-then-detach plus a reconnect) doesn't flap. The notices are
+  hub-generated and governor-neutral (not agent→agent hops), and delivered per `HUB_NOTIFY`
+  (below).
+- **Notification delivery.** Hub-wide notices (presence, duplicate-registration) go where
+  `HUB_NOTIFY` says: `dm` (admins' DMs — a user's DM chat id is their user id, so this works with
+  **no group configured**), `rooms` (`HUB_ROOMS`), or `both`. Default `dm`, so a DM-only deployment
+  still surfaces them. (Thread-specific notices like the loop-governor freeze and SLA escalation
+  go to their own room, not through this.)
 
 ## Files & images
 

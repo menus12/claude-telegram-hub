@@ -20,6 +20,7 @@ describe("loadHubConfig", () => {
     expect(cfg.ackSlaMs).toBe(120000);
     expect(cfg.answerSlaMs).toBe(600000);
     expect(cfg.duplicateName).toBe("reject");
+    expect(cfg.notify).toBe("dm");
     expect(cfg.admins).toEqual([]);
     expect(cfg.stateFile).toBeUndefined();
     expect(cfg.pairing).toBe(false);
@@ -77,6 +78,12 @@ describe("loadHubConfig", () => {
     expect(cfg.admins).toEqual(["1", "2"]);
     expect(cfg.stateFile).toBe("/data/access.json");
     expect(cfg.pairing).toBe(true);
+  });
+
+  it("reads the notification target and rejects an unknown value", () => {
+    expect(loadHubConfig({ ...minimal, HUB_NOTIFY: "both" }).notify).toBe("both");
+    expect(loadHubConfig({ ...minimal, HUB_NOTIFY: "rooms" }).notify).toBe("rooms");
+    expect(() => loadHubConfig({ ...minimal, HUB_NOTIFY: "email" })).toThrow(/notify/);
   });
 
   it("reads the duplicate-name policy and rejects an unknown value", () => {
