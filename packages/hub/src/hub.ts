@@ -9,6 +9,7 @@ import type {
 import type { TransportAdapter } from "./adapter.js";
 import { AgentRegistry } from "./registry.js";
 import { LoopGovernor } from "./governor.js";
+import { PresenceTracker } from "./presence.js";
 import { SessionServer } from "./server.js";
 import type { Logger } from "./logger.js";
 
@@ -35,17 +36,30 @@ export class Hub {
   private readonly server: SessionServer;
   private readonly allowlist: Set<string>;
   private readonly governor: LoopGovernor;
+  private readonly presence: PresenceTracker | undefined;
   private started = false;
 
   constructor(private readonly deps: HubDeps) {
     this.allowlist = new Set(deps.config.allowlist);
     this.governor = new LoopGovernor(deps.config.hopBudget);
+    // Presence announcements are opt-in and only meaningful where there's a room
+    // to post them to; otherwise the tracker is absent and lifecycle hooks no-op.
+    this.presence =
+      deps.config.presence && deps.config.rooms.length > 0
+        ? new PresenceTracker({
+            graceMs: deps.config.presenceGraceMs,
+            isLive: (agent) => this.registry.has(agent),
+            emit: (notice) => this.postToRooms(notice),
+          })
+        : undefined;
     this.server = new SessionServer({
       host: deps.config.bindHost,
       port: deps.config.bindPort,
       sessionSecret: deps.config.sessionSecret,
       registry: this.registry,
       onReply: (agent, reply) => this.onReply(agent, reply),
+      onRegister: (agent) => this.presence?.onConnect(agent),
+      onDetach: (agent) => this.presence?.onDetach(agent),
       isReady: () => this.started,
       logger: deps.logger,
     });
@@ -60,6 +74,7 @@ export class Hub {
 
   async stop(): Promise<void> {
     this.started = false;
+    this.presence?.stop();
     await this.deps.adapter.stop();
     await this.server.close();
     this.deps.logger("info", "hub stopped");
@@ -73,6 +88,20 @@ export class Hub {
   /** Agent names with a live session right now. */
   connectedAgents(): string[] {
     return this.registry.list();
+  }
+
+  /** Post a hub-generated notice (e.g. presence) to every configured room. */
+  private postToRooms(notice: OutboundMessage): void {
+    for (const room of this.deps.config.rooms) {
+      void this.deps.adapter
+        .send({ adapter: this.deps.adapter.name, room }, notice)
+        .catch((err: unknown) => {
+          this.deps.logger("warn", "presence notice send failed", {
+            room,
+            error: String(err),
+          });
+        });
+    }
   }
 
   /** adapter → hub: a normalized platform inbound message. */

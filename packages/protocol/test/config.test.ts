@@ -14,11 +14,32 @@ describe("loadHubConfig", () => {
     expect(cfg.allowlist).toEqual(["1", "2"]);
     expect(cfg.rooms).toEqual([]);
     expect(cfg.hopBudget).toBe(6);
+    expect(cfg.presence).toBe(false);
+    expect(cfg.presenceGraceMs).toBe(10000);
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
     expect(cfg.adapter).toBe("telegram");
     expect(cfg.logLevel).toBe("info");
+  });
+
+  it("coerces HUB_PRESENCE from on/off-style tokens", () => {
+    expect(loadHubConfig({ ...minimal, HUB_PRESENCE: "on" }).presence).toBe(true);
+    expect(loadHubConfig({ ...minimal, HUB_PRESENCE: "true" }).presence).toBe(true);
+    expect(loadHubConfig({ ...minimal, HUB_PRESENCE: "1" }).presence).toBe(true);
+    expect(loadHubConfig({ ...minimal, HUB_PRESENCE: "OFF" }).presence).toBe(false);
+    expect(loadHubConfig({ ...minimal, HUB_PRESENCE: "no" }).presence).toBe(false);
+  });
+
+  it("rejects an unrecognized HUB_PRESENCE value", () => {
+    expect(() => loadHubConfig({ ...minimal, HUB_PRESENCE: "maybe" })).toThrow(/presence/);
+  });
+
+  it("coerces the presence grace window", () => {
+    expect(loadHubConfig({ ...minimal, HUB_PRESENCE_GRACE_MS: "0" }).presenceGraceMs).toBe(0);
+    expect(loadHubConfig({ ...minimal, HUB_PRESENCE_GRACE_MS: "5000" }).presenceGraceMs).toBe(
+      5000,
+    );
   });
 
   it("parses csv lists and coerces numeric ports/budgets", () => {

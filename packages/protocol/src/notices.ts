@@ -31,6 +31,31 @@ export function offlineTargetNotice(agent: string): OutboundMessage {
 }
 
 /**
+ * The in-room notice posted when an agent's session first comes online, so the
+ * operator can see who is currently reachable. Debounced hub-side (announced only
+ * on the first live registration, not on restart churn).
+ */
+export function presenceOnlineNotice(agent: string): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text: `@${agent} is online.`,
+  };
+}
+
+/**
+ * The in-room notice posted when an agent's session goes offline, after a grace
+ * window with no live session (so a reconnect within the window doesn't flap).
+ */
+export function presenceOfflineNotice(agent: string): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text: `@${agent} is offline.`,
+  };
+}
+
+/**
  * The in-room notice posted when a coordination thread's hop budget is exhausted
  * and the hub freezes agent→agent routing. A human message resumes the thread.
  */

@@ -1,5 +1,10 @@
 export { Hub, type HubDeps } from "./hub.js";
 export { LoopGovernor, type GovernorDecision } from "./governor.js";
+export {
+  PresenceTracker,
+  type PresenceTrackerOptions,
+  type Scheduler,
+} from "./presence.js";
 export { AgentRegistry } from "./registry.js";
 export { Session } from "./session.js";
 export { SessionServer, type SessionServerOptions } from "./server.js";

@@ -18,6 +18,8 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_ALLOWLIST` | csv | — (**required**, ≥1) | Platform user ids allowed to talk to the hub; unknown senders dropped. |
 | `HUB_ROOMS` | csv | `[]` | Group room ids the hub operates in. Empty is valid (DM-only). |
 | `HUB_HOP_BUDGET` | int | `6` | Coordination-thread hops before agent→agent routing freezes. |
+| `HUB_PRESENCE` | bool | `false` | Announce `@agent online/offline` in `HUB_ROOMS`. Opt-in; needs ≥1 room. Accepts `on/off`, `true/false`, `1/0`, `yes/no`. |
+| `HUB_PRESENCE_GRACE_MS` | int | `10000` | Grace window a dropped session may reconnect within before it's announced offline (absorbs restart churn). |
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
 | `HUB_BIND_PORT` | int (0–65535) | `8787` | Port for the session-facing server (`0` = OS-assigned ephemeral). |

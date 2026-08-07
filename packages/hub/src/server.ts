@@ -19,6 +19,10 @@ export interface SessionServerOptions {
   sessionSecret: string;
   registry: AgentRegistry;
   onReply: (agent: string, reply: ReplyFrame) => void;
+  /** A session for `agent` just registered (fired after the registry is updated). */
+  onRegister?: (agent: string) => void;
+  /** A session for `agent` just detached (fired after the registry is updated). */
+  onDetach?: (agent: string) => void;
   /** Readiness probe backing GET /readyz. */
   isReady: () => boolean;
   logger: Logger;
@@ -135,6 +139,7 @@ export class SessionServer {
       if (session) {
         this.opts.registry.unregister(session);
         this.opts.logger("info", "session detached", { agent: session.agent });
+        this.opts.onDetach?.(session.agent);
       }
     });
 
@@ -178,6 +183,7 @@ export class SessionServer {
       protocolVersion: PROTOCOL_VERSION,
     });
     this.opts.logger("info", "session registered", { agent: frame.agent });
+    this.opts.onRegister?.(frame.agent);
     return session;
   }
 

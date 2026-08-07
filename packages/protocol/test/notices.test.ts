@@ -4,6 +4,8 @@ import {
   renderOutbound,
   offlineTargetNotice,
   loopFrozenNotice,
+  presenceOnlineNotice,
+  presenceOfflineNotice,
 } from "../src/index.js";
 
 describe("attribution", () => {
@@ -30,5 +32,13 @@ describe("hub notices", () => {
 
   it("builds a loop-frozen notice", () => {
     expect(loopFrozenNotice().kind).toBe("notice");
+  });
+
+  it("builds presence notices naming the agent, attributed to the hub", () => {
+    const on = presenceOnlineNotice("re-infra");
+    expect(on).toMatchObject({ agent: "hub", kind: "notice" });
+    expect(on.text).toBe("@re-infra is online.");
+    const off = presenceOfflineNotice("re-infra");
+    expect(off.text).toBe("@re-infra is offline.");
   });
 });
