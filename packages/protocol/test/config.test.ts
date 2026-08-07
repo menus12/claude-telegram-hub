@@ -16,6 +16,9 @@ describe("loadHubConfig", () => {
     expect(cfg.hopBudget).toBe(6);
     expect(cfg.presence).toBe(false);
     expect(cfg.presenceGraceMs).toBe(10000);
+    expect(cfg.sla).toBe(false);
+    expect(cfg.ackSlaMs).toBe(120000);
+    expect(cfg.answerSlaMs).toBe(600000);
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
@@ -40,6 +43,24 @@ describe("loadHubConfig", () => {
     expect(loadHubConfig({ ...minimal, HUB_PRESENCE_GRACE_MS: "5000" }).presenceGraceMs).toBe(
       5000,
     );
+  });
+
+  it("reads the response-SLA toggle and windows", () => {
+    const cfg = loadHubConfig({
+      ...minimal,
+      HUB_SLA: "on",
+      HUB_ACK_SLA: "60000",
+      HUB_ANSWER_SLA: "300000",
+    });
+    expect(cfg.sla).toBe(true);
+    expect(cfg.ackSlaMs).toBe(60000);
+    expect(cfg.answerSlaMs).toBe(300000);
+  });
+
+  it("rejects an answer window that isn't greater than the ack window", () => {
+    expect(() =>
+      loadHubConfig({ ...minimal, HUB_ACK_SLA: "300000", HUB_ANSWER_SLA: "120000" }),
+    ).toThrow(/answerSlaMs/);
   });
 
   it("parses csv lists and coerces numeric ports/budgets", () => {

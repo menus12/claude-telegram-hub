@@ -83,6 +83,16 @@ export const hubConfigSchema = z.object({
    * announces it offline — absorbs restart churn so presence doesn't flap.
    */
   presenceGraceMs: z.number().int().nonnegative().default(10000),
+  /**
+   * Durable response-SLA backstop for unanswered agent→agent `@`-asks (catches
+   * the case where the asker's session died with its own follow-up timer). Off by
+   * default.
+   */
+  sla: z.boolean().default(false),
+  /** T1: silence before the hub nudges the peer once. */
+  ackSlaMs: z.number().int().positive().default(120000),
+  /** T2: silence before the hub escalates to the operator and unblocks the asker. */
+  answerSlaMs: z.number().int().positive().default(600000),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -92,6 +102,9 @@ export const hubConfigSchema = z.object({
   /** Which transport adapter to load. */
   adapter: z.string().min(1).default("telegram"),
   logLevel: logLevelSchema.default("info"),
+}).refine((c) => c.answerSlaMs > c.ackSlaMs, {
+  message: "answerSlaMs (HUB_ANSWER_SLA) must be greater than ackSlaMs (HUB_ACK_SLA)",
+  path: ["answerSlaMs"],
 });
 export type HubConfig = z.infer<typeof hubConfigSchema>;
 
@@ -103,6 +116,9 @@ export const HUB_ENV = {
   hopBudget: "HUB_HOP_BUDGET",
   presence: "HUB_PRESENCE",
   presenceGraceMs: "HUB_PRESENCE_GRACE_MS",
+  sla: "HUB_SLA",
+  ackSlaMs: "HUB_ACK_SLA",
+  answerSlaMs: "HUB_ANSWER_SLA",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -120,6 +136,9 @@ export function loadHubConfig(env: Env): HubConfig {
       hopBudget: num(env[HUB_ENV.hopBudget]),
       presence: bool(env[HUB_ENV.presence]),
       presenceGraceMs: num(env[HUB_ENV.presenceGraceMs]),
+      sla: bool(env[HUB_ENV.sla]),
+      ackSlaMs: num(env[HUB_ENV.ackSlaMs]),
+      answerSlaMs: num(env[HUB_ENV.answerSlaMs]),
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { PresenceTracker, type Scheduler } from "../src/presence.js";
+import { PresenceTracker } from "../src/presence.js";
+import type { Scheduler } from "../src/scheduler.js";
 
 /** A controllable scheduler: nothing fires until `flush()` (grace elapsed). */
 class FakeScheduler {

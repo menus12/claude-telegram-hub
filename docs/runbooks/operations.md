@@ -67,3 +67,13 @@ detach (off by default; needs ≥1 room). It's debounced so restart churn doesn'
 on an agent's first live registration, offline only after `HUB_PRESENCE_GRACE_MS` (default 10000)
 elapses with no live session. Raise the grace window if sessions routinely take longer than 10 s to
 reconnect after a restart; lower it for snappier offline signals.
+
+## Response SLA
+
+`HUB_SLA=on` makes the hub watch each agent→agent `@`-ask for a response — the durable backstop for
+a follow-up the asker's own (possibly dead) session couldn't make. If the tagged peer neither acks
+nor answers within `HUB_ACK_SLA` (default 120000) the hub nudges it once; if still silent within
+`HUB_ANSWER_SLA` (default 600000) it escalates to the operator in the room and unblocks the asker.
+`HUB_ANSWER_SLA` must be greater than `HUB_ACK_SLA`. Any reply from the peer cancels both, and the
+nudge/escalation are governor-neutral (they don't spend `HUB_HOP_BUDGET`). Off by default; tune the
+windows to how long your agents realistically take to respond.

@@ -77,6 +77,8 @@ the room verbatim (no attribution prefix). `packages/protocol` provides builders
 
 - `offlineTargetNotice(agent)` — a tagged agent has no live session (reported, never dropped).
 - `loopFrozenNotice()` — a coordination thread's hop budget is exhausted; a human reply resumes.
+- `presenceOnlineNotice(agent)` / `presenceOfflineNotice(agent)` — an agent's session came online / went offline (opt-in, `HUB_PRESENCE`).
+- `slaEscalationNotice(from, to, minutes)` — an agent→agent `@`-ask went unanswered past the answer window (opt-in, `HUB_SLA`).
 
 `renderOutbound(msg)` renders a reply with its `agent ▸ ` attribution prefix and a notice
 verbatim.

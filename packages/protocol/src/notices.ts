@@ -56,6 +56,19 @@ export function presenceOfflineNotice(agent: string): OutboundMessage {
 }
 
 /**
+ * The in-room notice the response-SLA posts to the operator when an agent→agent
+ * `@`-ask goes unanswered past the answer window — the durable backstop for a
+ * follow-up the asker's (possibly dead) session couldn't make itself.
+ */
+export function slaEscalationNotice(from: string, to: string, minutes: number): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text: `@${from}'s request to @${to} is unanswered after ${minutes} min (no ack or reply). Over to you.`,
+  };
+}
+
+/**
  * The in-room notice posted when a coordination thread's hop budget is exhausted
  * and the hub freezes agent→agent routing. A human message resumes the thread.
  */
