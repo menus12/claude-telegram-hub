@@ -44,7 +44,51 @@ az container create \
   them on the CLI.
 - `HUB_BIND_HOST=0.0.0.0` is required so the hub is reachable; the image already defaults to it.
 
-## 3. Reachability for sessions
+## 3. Persistent state (runtime allowlist management)
+
+ACI containers have an **ephemeral filesystem** — anything written to the container's local disk is
+lost on restart or redeploy. So if you use the in-chat allowlist commands (`/allow`, `/deny`,
+`/pending`; see
+[operations.md](../runbooks/operations.md#manage-the-allowlist-at-runtime)), the hub must persist its
+state to a **mounted Azure Files share** via `HUB_STATE_FILE`, or every change is dropped on the next
+deploy. If you manage access purely through `HUB_ALLOWLIST` + redeploys, skip this — leave
+`HUB_STATE_FILE` unset (changes are then in-memory only).
+
+Create a storage account and file share:
+
+```sh
+az storage account create -g <rg> -n <sa> --sku Standard_LRS
+az storage share create --account-name <sa> --name hub-state
+KEY=$(az storage account keys list -g <rg> -n <sa> --query '[0].value' -o tsv)
+```
+
+Then mount it into the container (single-container ACI supports one Azure Files volume — all we
+need). Add to the `az container create` from step 2:
+
+```sh
+  --azure-file-volume-account-name <sa> \
+  --azure-file-volume-account-key "$KEY" \
+  --azure-file-volume-share-name hub-state \
+  --azure-file-volume-mount-path /data \
+  --environment-variables ... HUB_STATE_FILE=/data/access.json ...
+```
+
+- **The account key is a secret** — pull it from Key Vault in your pipeline rather than passing it on
+  the CLI.
+- **One share per hub.** You already run exactly one container per bot token (never scale replicas),
+  so there's no multi-writer concern; the hub rewrites the whole small JSON on each change. A
+  `Standard_LRS` share holding a few user ids costs pennies (1 GiB quota is plenty).
+- **Verify writability (non-root image).** The container runs as an unprivileged user (uid 1000), so
+  the mount must be writable by it. On boot the hub *materializes* `HUB_STATE_FILE`; if it can't, it
+  logs a loud `error` — `HUB_STATE_FILE (...) is not writable — runtime allowlist changes will be
+  LOST on restart`. Check the container logs after the first deploy. Functional check: `/allow <id>`
+  → restart the container → `/allowlist` should still list it.
+- **Admins & DMs need no extra infra.** Admins default to the `HUB_ALLOWLIST` seed (override with
+  `HUB_ADMINS`). Command replies and pairing pings are DMs sent over the bot's existing **outbound**
+  connection — no inbound endpoint or networking change. Each admin must have DM'd the bot once so it
+  can reply.
+
+## 4. Reachability for sessions
 
 Sessions attach over the session↔hub WebSocket at `TELEGRAM_HUB_URL`. Two topologies:
 
@@ -53,7 +97,7 @@ Sessions attach over the session↔hub WebSocket at `TELEGRAM_HUB_URL`. Two topo
   `HUB_SESSION_SECRET` is the auth boundary — treat the endpoint as internet-facing.
 - **Co-located hub:** if sessions run on the same host/VNet, point them at the private address.
 
-## 4. Health
+## 5. Health
 
 The container exposes `GET /healthz` (liveness) and `GET /readyz` (ready once the adapter has
 started). The image also declares a Docker `HEALTHCHECK`; wire `/readyz` into your orchestration

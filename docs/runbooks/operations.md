@@ -31,10 +31,17 @@ Agents are logical names, not new bots. To add one, attach a new session with a 
 
 `HUB_ALLOWLIST` is the seed set at deploy; admins can change access live from chat without a
 restart. Admins are `HUB_ADMINS` (defaulting to the seed). Commands: `/allow <id>`, `/deny <id>`,
-`/allowlist`, `/pending`, `/start`. Set `HUB_STATE_FILE` to a path on persistent storage (a mounted
-volume for a container) so the changes **survive a restart** — without it, runtime changes are
-in-memory only. With `HUB_PAIRING=on`, an unknown sender lands in `pending` and admins are notified,
-rather than being dropped silently. All grants/revocations are logged with who did what.
+`/allowlist`, `/pending`, `/start`. With `HUB_PAIRING=on`, an unknown sender lands in `pending` and
+admins are notified, rather than being dropped silently. All grants/revocations are logged with who
+did what.
+
+**Persistence.** Set `HUB_STATE_FILE` to a path on **persistent, writable** storage so runtime
+changes **survive a restart** — without it they're in-memory only (lost on restart). On a container
+this means a mounted volume; for Azure Container Instances it's an **Azure Files share** — see
+[deploy/azure-container-instances.md](../deploy/azure-container-instances.md#3-persistent-state-runtime-allowlist-management).
+The image runs as a non-root user (uid 1000), so the mount must be writable by it; at boot the hub
+materializes the file and logs a loud `error` (`HUB_STATE_FILE (...) is not writable …`) if it can't,
+so a mis-mounted volume is obvious rather than silently dropping your allowlist on the next deploy.
 
 ## Rotate the session secret
 
