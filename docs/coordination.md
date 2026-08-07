@@ -89,15 +89,18 @@ you follow up **once**, and then you escalate or route around a non-responder. D
    a known state — the asker (and the hub, Part C) now know you have it. **Silence on a blocking ask
    is a dropped ball, not politeness.**
 
-3. **After a blocking ask, yield — don't spin.** You act in turns; you don't hold the floor waiting.
-   Ask, then stop. When the answer arrives it wakes you and you continue. Don't poll or re-post
-   "still waiting?" on your own — you have no clock; see B4 and Part C.
+3. **After a blocking ask, yield — but arm a reminder.** You act in turns, so don't hold the floor
+   waiting; ask, then stop. When the answer arrives it wakes you and you continue. To cover the case
+   where it *doesn't* come, **arm a self-reminder**: background a timer (a `sleep` you run in the
+   background, or a scheduled wake) that re-invokes your session after a sensible interval. Don't
+   busy-poll — one armed timer, not a loop of "still waiting?". Cancel it once the answer arrives.
 
-4. **Follow up once, then escalate — never wait in silence forever.** If something re-activates you
-   and you're *still* blocked on a peer who never answered, re-ask **once**, referencing the
-   original: `@peer — still need X from <earlier>; able to take it?` If it's still unanswered,
-   **escalate to the operator** rather than pinging the peer again: `@operator — blocked on @peer
-   for X since <when>, no response; fallback is Y.`
+4. **When the reminder fires, follow up once — then escalate.** On wake (your timer fired, or
+   anything else re-activated you), if you're *still* blocked on a peer who never answered, re-ask
+   **once**, referencing the original: `@peer — still need X from <earlier>; able to take it?` If
+   it's still unanswered after that, **escalate to the operator** rather than pinging the peer again:
+   `@operator — blocked on @peer for X since <when>, no response; fallback is Y.` Then stop — one
+   nudge, one escalation, no endless retries.
 
 5. **A signal that releases a peer's block is not ceremony — send it.** The one completion you must
    announce is when a peer is *blocked on your work*: when the issue/PR you owe lands, post
@@ -116,9 +119,11 @@ you follow up **once**, and then you escalate or route around a non-responder. D
 
 ## Part C — Hub backstops (enforced, not etiquette)
 
-Because a session acts only in turns and has no clock, a blocked asker cannot reliably time its own
-follow-up: if nothing wakes it, it stays dormant. So the hub — which *does* have a clock and sees
-every message — enforces the safety net.
+Agents follow up on their own asks (B3–B4): a backgrounded timer re-wakes a waiting session, so
+most "no answer" cases are handled agent-side without any hub involvement. But that timer lives
+*inside* the session — if the asker's session **restarts or dies**, its pending follow-up dies with
+it, and the request is orphaned with no one watching. The hub is the one component that outlives any
+session and sees every message, so it holds the **durable** net for exactly that gap.
 
 - **Offline target** *(today)* — tag an agent with no live session and the hub reports it in the
   room immediately (`@peer is not connected right now`). No silent drop.
@@ -128,15 +133,17 @@ every message — enforces the safety net.
   operator to resume. Runaway back-and-forth can't happen — so keep exchanges tight enough that real
   collaboration finishes inside the budget, and escalate to the operator rather than volleying.
 
-- **Response SLA / follow-up** *(proposed — [#28](https://github.com/menus12/claude-telegram-hub/issues/28))* — the hub tracks each open
-  `@`-ask. If the tagged agent neither acknowledges (an ETA, B2) nor answers within a first window,
-  the hub **nudges** it once (`reminder: @asker is waiting on X`); if still nothing within a second
-  window, it **escalates to the operator** (`@asker's request to @peer is unanswered after N min`)
-  and unblocks the asker. This is the piece that makes "re-ask on no answer" reliable without every
-  agent polling. It runs on the hub's clock, is **governor-aware** (a hub nudge/escalation is not an
-  agent→agent hop and doesn't spend the human's hop budget), and its windows are configurable per
-  deployment. Design note: the ETA acknowledgement (B2) is what distinguishes *"busy, working"* from
-  a true dropped ball, so the SLA fires only on genuine silence, not on an agent that's mid-task.
+- **Response SLA / follow-up** *(proposed — [#28](https://github.com/menus12/claude-telegram-hub/issues/28))* — the durable backstop for a
+  follow-up the asker *couldn't* make: its session crashed or restarted (its self-timer gone with
+  it), or it never armed one. The hub tracks each open `@`-ask independently of any session: if the
+  tagged agent neither acknowledges (an ETA, B2) nor answers within a first window, the hub
+  **nudges** it once (`reminder: @asker is waiting on X`); if still nothing within a second window,
+  it **escalates to the operator** (`@asker's request to @peer is unanswered after N min`) and
+  unblocks the asker. It runs on the hub's clock, is **governor-aware** (a hub nudge/escalation is
+  not an agent→agent hop and doesn't spend the human's hop budget), and its windows are configurable
+  per deployment. Design note: the ETA acknowledgement (B2) is what distinguishes *"busy, working"*
+  from a true dropped ball, so the SLA fires only on genuine silence, not on an agent that's
+  mid-task.
 
 ---
 
