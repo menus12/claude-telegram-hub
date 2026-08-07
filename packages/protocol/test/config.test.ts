@@ -28,6 +28,7 @@ describe("loadHubConfig", () => {
     expect(cfg.sttUrl).toBeUndefined();
     expect(cfg.sttModel).toBe("small");
     expect(cfg.sttLang).toBe("auto");
+    expect(cfg.voiceEcho).toBe(true);
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);

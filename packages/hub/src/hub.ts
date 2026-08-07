@@ -3,8 +3,13 @@ import {
   loopFrozenNotice,
   offlineTargetNotice,
   slaEscalationNotice,
+  transcriptEchoNotice,
+  voiceDisabledNotice,
+  voiceUnaddressedNotice,
+  voiceUnclearNotice,
 } from "@claude-telegram-hub/protocol";
 import { isBroadcastMention } from "@claude-telegram-hub/protocol";
+import { resolveSpokenRecipients } from "./voice-routing.js";
 import type {
   FilePayload,
   HubConfig,
@@ -57,6 +62,8 @@ export class Hub {
   private readonly pairing: boolean;
   private readonly notifyTarget: "dm" | "rooms" | "both";
   private readonly broadcast: boolean;
+  private readonly voiceEnabled: boolean;
+  private readonly voiceEcho: boolean;
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
@@ -75,6 +82,8 @@ export class Hub {
     this.pairing = deps.config.pairing;
     this.notifyTarget = deps.config.notify;
     this.broadcast = deps.config.broadcast;
+    this.voiceEnabled = deps.config.sttUrl !== undefined;
+    this.voiceEcho = deps.config.voiceEcho;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -316,6 +325,11 @@ export class Hub {
     // license to continue), unfreezing agent↔agent routing there.
     this.governor.refill(message.room);
 
+    // Voice notes carry no `@tags`, so resolve their recipients (and echo the
+    // transcript) before the mention check below. Returns false when it handled
+    // the message with a notice (disabled / unclear / unaddressed).
+    if (message.voice && !this.handleVoiceAddressing(message)) return;
+
     // Operator broadcast: `@all` from a human expands to every live agent, so
     // unicast/multicast/broadcast are all just "route to a set" downstream.
     if (message.fromKind === "human" && this.hasBroadcast(message.mentions)) {
@@ -345,6 +359,43 @@ export class Hub {
   private expandBroadcast(mentions: string[]): string[] {
     const explicit = mentions.filter((m) => !isBroadcastMention(m));
     return [...new Set([...this.registry.list(), ...explicit])];
+  }
+
+  /**
+   * Resolve and echo a voice note. Addressing priority: reply-to (already in
+   * `mentions`) wins; otherwise the transcript's leading names / broadcast keyword.
+   * Sets `message.mentions` and posts the transcript echo. Returns false — and
+   * posts an explanatory notice — when the note is disabled / unclear / unaddressed,
+   * so the caller stops.
+   */
+  private handleVoiceAddressing(message: InboundMessage): boolean {
+    const room = message.room;
+    if (!this.voiceEnabled) {
+      this.replyNotice(room, voiceDisabledNotice().text);
+      return false;
+    }
+    if (message.text.trim() === "") {
+      this.replyNotice(room, voiceUnclearNotice().text);
+      return false;
+    }
+    // Reply-to (if any) already populated mentions; only resolve spoken recipients
+    // when it didn't — "you replied to them" is the address, the words are the message.
+    if (message.mentions.length === 0) {
+      const spoken = resolveSpokenRecipients(message.text, this.registry.list());
+      message.mentions = spoken.broadcast ? this.registry.list() : spoken.recipients;
+    }
+    if (message.mentions.length === 0) {
+      this.replyNotice(room, voiceUnaddressedNotice().text);
+      return false;
+    }
+    if (this.voiceEcho) {
+      this.replyNotice(room, transcriptEchoNotice(message.mentions, message.text).text);
+    }
+    this.deps.logger("info", "voice note routed", {
+      room,
+      recipients: message.mentions.length,
+    });
+    return true;
   }
 
   /** session → hub → adapter: deliver an agent's file out to a room. */

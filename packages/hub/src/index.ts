@@ -1,5 +1,6 @@
 export { Hub, type HubDeps } from "./hub.js";
 export { LoopGovernor, type GovernorDecision } from "./governor.js";
+export { resolveSpokenRecipients, type SpokenRecipients } from "./voice-routing.js";
 export {
   AccessController,
   parseCommand,

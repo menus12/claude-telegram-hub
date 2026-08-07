@@ -137,6 +137,24 @@ that already carries messages — so file transfer works whether the hub is co-l
 Files are human-facing: there is no agent→agent file re-injection, and file sends don't touch the
 loop governor.
 
+## Voice notes (opt-in)
+
+With `HUB_STT_URL` set, a Telegram voice note is transcribed and fed into the **same** routing
+pipeline as typed text — voice is a modality, not a new coordination surface (full design:
+[design/voice-messages.md](design/voice-messages.md)). Two things are voice-specific, keyed off the
+transcript's `voice` marker:
+
+- **Addressing without `@tags`.** Speech carries no sigils, so the hub resolves recipients from the
+  co-worker gestures people actually use: **reply-to** wins (you replied to that agent), otherwise the
+  transcript's **leading segment** — consecutive agent-name matches (generous/fuzzy, so a natural
+  "infra" hits `re-infra`) and a broadcast keyword ("everyone"). Only the opening is an address, so
+  "Platform, ask gitops about X" is unicast to platform. The result is the same recipient **set** the
+  rest of routing uses, so unicast/multicast/broadcast fall out of its cardinality.
+- **Transcript echo.** The hub posts `🎙️ heard → @…: "transcript"` (`HUB_VOICE_ECHO`, default on) — a
+  colleague-style paraphrase that lets the operator catch a mis-hear *or* a mis-address before agents
+  act. Governor-neutral, one line. An unclear/unaddressed note gets a brief explanatory notice, never
+  a silent drop or an accidental broadcast.
+
 ## Agent-to-agent coordination
 
 The platform will **not** deliver one bot's message to another bot (see constraints). The hub

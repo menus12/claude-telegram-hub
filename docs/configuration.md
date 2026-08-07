@@ -32,6 +32,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_STT_URL` | url | — | Speech-to-text service base URL (OpenAI-compatible `POST /v1/audio/transcriptions`). Unset = voice disabled. See [design/voice-messages.md](design/voice-messages.md). |
 | `HUB_STT_MODEL` | string | `small` | STT model name passed to the service (e.g. `small`, `medium`). |
 | `HUB_STT_LANG` | string | `auto` | STT language: `auto` (detect) or an ISO code (`ru`, `en`). |
+| `HUB_VOICE_ECHO` | bool | `true` | Echo a voice note's transcript + resolved recipients into the room (`🎙️ heard → @…`). |
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
 | `HUB_BIND_PORT` | int (0–65535) | `8787` | Port for the session-facing server (`0` = OS-assigned ephemeral). |

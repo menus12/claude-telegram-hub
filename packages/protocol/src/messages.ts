@@ -40,6 +40,12 @@ export const inboundMessageSchema = z.object({
   mentions: z.array(z.string().min(1)).default([]),
   /** Optional attachment references (urls / file ids); resolved by the adapter. */
   attachments: z.array(z.string()).optional(),
+  /**
+   * True when `text` is the transcript of a voice note. The hub applies voice-only
+   * behavior to these: spoken-name/broadcast addressing (speech has no `@tags`) and
+   * a transcript echo so the operator can catch a mis-hear.
+   */
+  voice: z.boolean().optional(),
 });
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 
