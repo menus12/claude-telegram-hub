@@ -70,7 +70,16 @@ export class GrammyApi implements TelegramApi {
         ...(m.caption !== undefined ? { caption: m.caption } : {}),
         ...(attachment ? { attachment } : {}),
         ...(m.reply_to_message
-          ? { reply_to_message: { message_id: m.reply_to_message.message_id } }
+          ? {
+              reply_to_message: {
+                message_id: m.reply_to_message.message_id,
+                // The visible text of the replied-to message (no markup); its
+                // `agent ▸ …` prefix identifies the author when the index misses.
+                ...("text" in m.reply_to_message && typeof m.reply_to_message.text === "string"
+                  ? { text: m.reply_to_message.text }
+                  : {}),
+              },
+            }
           : {}),
       };
       handler(msg);

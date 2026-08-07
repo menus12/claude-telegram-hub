@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   attributionPrefix,
+  parseAttribution,
   renderOutbound,
   offlineTargetNotice,
   loopFrozenNotice,
@@ -22,6 +23,16 @@ describe("attribution", () => {
     expect(renderOutbound({ agent: "hub", text: "paused", kind: "notice" })).toBe(
       "paused",
     );
+  });
+
+  it("recovers the agent from an attributed message and ignores unattributed text", () => {
+    expect(parseAttribution("re-infra ▸ deployed to prod")).toBe("re-infra");
+    // round-trips with the prefix builder
+    expect(parseAttribution(`${attributionPrefix("re_gitops")}done`)).toBe("re_gitops");
+    // not attributed → undefined (notices, plain human text)
+    expect(parseAttribution("@re-infra is online.")).toBeUndefined();
+    expect(parseAttribution("just some text")).toBeUndefined();
+    expect(parseAttribution(" ▸ leading separator")).toBeUndefined();
   });
 });
 
