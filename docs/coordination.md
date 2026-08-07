@@ -137,17 +137,17 @@ session and sees every message, so it holds the **durable** net for exactly that
   operator to resume. Runaway back-and-forth can't happen — so keep exchanges tight enough that real
   collaboration finishes inside the budget, and escalate to the operator rather than volleying.
 
-- **Response SLA / follow-up** *(proposed — [#28](https://github.com/menus12/claude-telegram-hub/issues/28))* — the durable backstop for a
+- **Response SLA / follow-up** *(today, opt-in — `HUB_SLA`)* — the durable backstop for a
   follow-up the asker *couldn't* make: its session crashed or restarted (its self-timer gone with
   it), or it never armed one. The hub tracks each open `@`-ask independently of any session: if the
-  tagged agent neither acknowledges (an ETA, B2) nor answers within a first window, the hub
-  **nudges** it once (`reminder: @asker is waiting on X`); if still nothing within a second window,
-  it **escalates to the operator** (`@asker's request to @peer is unanswered after N min`) and
-  unblocks the asker. It runs on the hub's clock, is **governor-aware** (a hub nudge/escalation is
-  not an agent→agent hop and doesn't spend the human's hop budget), and its windows are configurable
-  per deployment. Design note: the ETA acknowledgement (B2) is what distinguishes *"busy, working"*
-  from a true dropped ball, so the SLA fires only on genuine silence, not on an agent that's
-  mid-task.
+  tagged agent neither acknowledges (an ETA, B2) nor answers within the first window (`HUB_ACK_SLA`),
+  the hub **nudges** it once (`reminder: @asker is waiting on X`); if still nothing within the second
+  window (`HUB_ANSWER_SLA`), it **escalates to the operator** (`@asker's request to @peer is
+  unanswered after N min`) and unblocks the asker. It runs on the hub's clock, is **governor-aware**
+  (a hub nudge/escalation is not an agent→agent hop and doesn't spend the human's hop budget), and
+  its windows are configurable per deployment. Design note: the ETA acknowledgement (B2) is what
+  distinguishes *"busy, working"* from a true dropped ball — any reply from the peer (ack or answer)
+  satisfies the ask, so the SLA fires only on genuine silence, not on an agent that's mid-task.
 
 ---
 

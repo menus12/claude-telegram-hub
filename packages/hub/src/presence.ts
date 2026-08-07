@@ -1,15 +1,6 @@
 import { presenceOfflineNotice, presenceOnlineNotice } from "@claude-telegram-hub/protocol";
 import type { OutboundMessage } from "@claude-telegram-hub/protocol";
-
-/** A cancelable one-shot timer. Injectable so tests avoid wall-clock flakiness. */
-export type Scheduler = (fn: () => void, delayMs: number) => () => void;
-
-const realScheduler: Scheduler = (fn, delayMs) => {
-  const timer = setTimeout(fn, delayMs);
-  // Don't let a pending presence timer keep the process alive.
-  timer.unref?.();
-  return () => clearTimeout(timer);
-};
+import { realScheduler, type Scheduler } from "./scheduler.js";
 
 export interface PresenceTrackerOptions {
   /**

@@ -20,6 +20,9 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_HOP_BUDGET` | int | `6` | Coordination-thread hops before agent→agent routing freezes. |
 | `HUB_PRESENCE` | bool | `false` | Announce `@agent online/offline` in `HUB_ROOMS`. Opt-in; needs ≥1 room. Accepts `on/off`, `true/false`, `1/0`, `yes/no`. |
 | `HUB_PRESENCE_GRACE_MS` | int | `10000` | Grace window a dropped session may reconnect within before it's announced offline (absorbs restart churn). |
+| `HUB_SLA` | bool | `false` | Durable response-SLA backstop for unanswered agent→agent `@`-asks. Opt-in. |
+| `HUB_ACK_SLA` | int | `120000` | T1 — silence (ms) before the hub nudges the peer once. |
+| `HUB_ANSWER_SLA` | int | `600000` | T2 — silence (ms) before the hub escalates to the operator and unblocks the asker. Must be > `HUB_ACK_SLA`. |
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
 | `HUB_BIND_PORT` | int (0–65535) | `8787` | Port for the session-facing server (`0` = OS-assigned ephemeral). |

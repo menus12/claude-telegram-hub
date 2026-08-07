@@ -6,6 +6,7 @@ import {
   loopFrozenNotice,
   presenceOnlineNotice,
   presenceOfflineNotice,
+  slaEscalationNotice,
 } from "../src/index.js";
 
 describe("attribution", () => {
@@ -40,5 +41,13 @@ describe("hub notices", () => {
     expect(on.text).toBe("@re-infra is online.");
     const off = presenceOfflineNotice("re-infra");
     expect(off.text).toBe("@re-infra is offline.");
+  });
+
+  it("builds an SLA escalation notice naming both agents and the window", () => {
+    const n = slaEscalationNotice("re-infra", "re-gitops", 10);
+    expect(n).toMatchObject({ agent: "hub", kind: "notice" });
+    expect(n.text).toContain("@re-infra");
+    expect(n.text).toContain("@re-gitops");
+    expect(n.text).toContain("10 min");
   });
 });
