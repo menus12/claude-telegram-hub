@@ -22,6 +22,15 @@ npm pack -w @claude-telegram-hub/channel
 The tarball (`claude-telegram-hub-channel-<version>.tgz`) is the installable artifact — the same
 package works for every deployment.
 
+> **Upgrading — rebuild the channel too.** The channel is a **separate artifact from the hub** and
+> versions independently. Upgrading the hub image does **not** update the installed channel, and the
+> session runs the built `dist/main.cjs`, not the source. New session-facing features — most notably
+> **file/image transfer** — need a channel built from a version that has them, or the session silently
+> ignores them (the protocol is intentionally backward-compatible, so an old channel just drops fields
+> like an inbound file rather than erroring). After pulling a new version, **`npm run build -w
+> @claude-telegram-hub/channel`, reinstall the plugin, and start a fresh session** (plugins load at
+> startup).
+
 ## Install as a plugin + activate the channel (recommended)
 
 Loading via `--plugin-dir` connects the channel to the hub, but Claude Code will **not surface
@@ -113,3 +122,10 @@ gitignored by this repo's `.gitignore`.
 - **One `getUpdates` consumer per token.** If another Telegram channel (e.g. the official plugin)
   runs on the same bot token, its poller competes with the hub and delivery gets flaky. Disable it
   (`claude plugin disable telegram@claude-plugins-official`) and run exactly one poller.
+- **Text works but files/images don't arrive.** Almost always a **stale channel**: the installed
+  plugin predates file support, so it drops the inbound file field on parse (replies still work).
+  Rebuild and reinstall the channel from a version with file transfer, then start a fresh session
+  (see "Upgrading" above). To confirm it's not the hub side, check the hub logs for
+  `fetched inbound attachment {filename, bytes}` (the hub downloaded and forwarded it) — if that's
+  present but the agent sees nothing, the channel is stale. Also remember: an operator's file must
+  carry a **caption that tags the agent** (or be a reply to that agent's message), or it isn't routed.

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -35,6 +35,17 @@ function humanFrame(text: string, mentions: string[] = []): InboundFrame {
       fromId: "42",
       text,
       mentions,
+    },
+  };
+}
+
+function fileFrame(text: string): InboundFrame {
+  return {
+    ...humanFrame(text),
+    file: {
+      filename: "rufus.ini",
+      mimeType: "application/octet-stream",
+      dataBase64: Buffer.from("[boot]\nkey=value").toString("base64"),
     },
   };
 }
@@ -82,10 +93,24 @@ describe("buildInboundNotification", () => {
   });
 
   it("surfaces an attachment path in meta and inline in the content", () => {
-    const note = buildInboundNotification(humanFrame("look"), "/tmp/x/shot.png");
-    expect(note.params.meta.attachment_path).toBe("/tmp/x/shot.png");
+    const note = buildInboundNotification(fileFrame("look"), "/tmp/x/rufus.ini");
+    expect(note.params.meta.attachment_path).toBe("/tmp/x/rufus.ini");
+    expect(note.params.meta.attachment_name).toBe("rufus.ini");
     expect(note.params.content).toContain("look");
-    expect(note.params.content).toContain("/tmp/x/shot.png");
+    expect(note.params.content).toContain("/tmp/x/rufus.ini");
+  });
+
+  it("announces an attached file even when it couldn't be saved (never silent)", () => {
+    const note = buildInboundNotification(fileFrame("look")); // no path → save failed
+    expect(note.params.meta.attachment_name).toBe("rufus.ini");
+    expect(note.params.meta.attachment_path).toBeUndefined();
+    expect(note.params.content).toContain("could not be saved");
+  });
+
+  it("does not add attachment meta to a fileless message", () => {
+    const note = buildInboundNotification(humanFrame("hi"), "/tmp/x/shot.png");
+    expect(note.params.meta.attachment_path).toBeUndefined();
+    expect(note.params.meta.attachment_name).toBeUndefined();
   });
 });
 
@@ -218,6 +243,37 @@ describe("MCP wiring (in-memory)", () => {
     }
 
     await client.close();
+    await channel.mcp.close();
+  });
+
+  it("materializes an inbound file to a local path and injects that path (end to end)", async () => {
+    let events: HubClientEvents | undefined;
+    const channel = buildChannel(cfg(), {
+      logger: () => {},
+      createHub: (evts) => {
+        events = evts;
+        return { start() {}, stop() {}, sendReply() {}, sendFile() {} };
+      },
+    });
+    const noteSpy = vi.spyOn(channel.mcp, "notification").mockResolvedValue(undefined);
+
+    // The hub pushes an inbound message carrying file bytes (as after downloading a
+    // Telegram document). The channel must save it and inject the local path.
+    events?.onInbound(fileFrame("@a can you see this file?"));
+
+    await vi.waitFor(() => expect(noteSpy).toHaveBeenCalled());
+    const note = noteSpy.mock.calls[0][0] as unknown as {
+      params: { content: string; meta: Record<string, string> };
+    };
+    const savedPath = note.params.meta.attachment_path;
+    expect(savedPath).toBeTruthy();
+    expect(note.params.content).toContain("attachment saved to");
+    try {
+      expect((await readFile(savedPath)).toString()).toBe("[boot]\nkey=value");
+    } finally {
+      await rm(savedPath, { force: true });
+    }
+
     await channel.mcp.close();
   });
 });
