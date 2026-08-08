@@ -10,12 +10,13 @@ import { FakeTelegramApi } from "./fake-telegram.js";
 import { FakeTranscriptionService } from "./fake-transcriber.js";
 import { waitFor, delay } from "./helpers.js";
 
-async function harness(transcriber?: TranscriptionService) {
+async function harness(transcriber?: TranscriptionService, getAgents?: () => string[]) {
   const api = new FakeTelegramApi();
   const adapter = new TelegramAdapter({
     api,
     tagSigil: "@",
     ...(transcriber ? { transcriber } : {}),
+    ...(getAgents ? { getAgents } : {}),
   });
   const received: InboundMessage[] = [];
   await adapter.start((m) => {
@@ -54,6 +55,17 @@ describe("Telegram voice notes", () => {
     // the audio was sent to the transcriber
     expect(stt.calls[0].mimeType).toBe("audio/ogg");
     expect(stt.calls[0].bytes.toString()).toBe("OGG-BYTES");
+  });
+
+  it("biases transcription with the live agent names (#65)", async () => {
+    const stt = new FakeTranscriptionService("conn redeploy");
+    const { api } = await harness(stt, () => ["conn", "kb", "platform"]);
+    api.setFile("v1", Buffer.from("OGG"));
+    api.push(voiceMsg());
+    await delay(10);
+    expect(stt.options[0]?.prompt).toContain("conn");
+    expect(stt.options[0]?.prompt).toContain("kb");
+    expect(stt.options[0]?.prompt).toContain("platform");
   });
 
   it("carries a reply-to address on a voice note (resolved from attribution)", async () => {

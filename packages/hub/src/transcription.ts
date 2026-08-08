@@ -24,7 +24,7 @@ export interface TranscriptionResult {
  * swap, not a code change. See docs/design/voice-messages.md.
  */
 export interface TranscriptionService {
-  transcribe(audio: AudioInput, opts?: { lang?: string }): Promise<TranscriptionResult>;
+  transcribe(audio: AudioInput, opts?: { lang?: string; prompt?: string }): Promise<TranscriptionResult>;
 }
 
 export interface HttpTranscriptionOptions {
@@ -76,13 +76,19 @@ export class HttpTranscriptionService implements TranscriptionService {
     this.endpoint = resolveEndpoint(opts.url, "/v1/audio/transcriptions");
   }
 
-  async transcribe(audio: AudioInput, opts?: { lang?: string }): Promise<TranscriptionResult> {
+  async transcribe(
+    audio: AudioInput,
+    opts?: { lang?: string; prompt?: string },
+  ): Promise<TranscriptionResult> {
     const form = new FormData();
     form.append("file", new Blob([audio.bytes], { type: audio.mimeType }), audio.filename);
     form.append("model", this.opts.model);
     form.append("response_format", "json");
     const lang = opts?.lang ?? this.opts.defaultLang;
     if (lang && lang !== "auto") form.append("language", lang);
+    // Bias the model toward the current agent names (short repo tokens transcribe
+    // badly otherwise). Ignored by services that don't support `prompt`.
+    if (opts?.prompt) form.append("prompt", opts.prompt);
 
     const res = await fetch(this.endpoint, {
       method: "POST",

@@ -24,6 +24,54 @@ function normalize(s: string): string {
 }
 
 /**
+ * True if `a` and `b` are within `max` edits, counting an adjacent transposition as
+ * one (Damerau / optimal string alignment) — transpositions like `platfrom` are a
+ * common transcription slip. Small strings, so a full matrix is fine.
+ */
+function withinEditDistance(a: string, b: string, max: number): boolean {
+  const n = a.length;
+  const m = b.length;
+  if (Math.abs(n - m) > max) return false;
+  const d: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = 0; i <= n; i++) d[i][0] = i;
+  for (let j = 0; j <= m; j++) d[0][j] = j;
+  for (let i = 1; i <= n; i++) {
+    let rowMin = Infinity;
+    for (let j = 1; j <= m; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1); // adjacent transposition
+      }
+      rowMin = Math.min(rowMin, d[i][j]);
+    }
+    if (rowMin > max) return false; // no row can lead to ≤ max
+  }
+  return d[n][m] <= max;
+}
+
+/**
+ * Match a spoken token to an agent, tolerantly (short repo names transcribe badly):
+ *  1. exact normalized equality — any length, so a 2-char name like `kb` matches;
+ *  2. substring either way (len ≥ 3) — `con` → `conn`, `kb123` → `kb`;
+ *  3. one edit's distance (len ≥ 4) — catches a typo/phonetic near-miss like
+ *     `platfrom` → `platform`.
+ * STT prompt-biasing (feeding the roster to Whisper) fixes most cases upstream; this
+ * mops up the rest, and every match is shown in the transcript echo before agents act.
+ */
+function matchAgent(token: string, roster: { agent: string; norm: string }[]): string | undefined {
+  for (const a of roster) if (a.norm === token) return a.agent;
+  if (token.length < MIN_NAME_TOKEN) return undefined;
+  for (const a of roster) if (a.norm.includes(token) || token.includes(a.norm)) return a.agent;
+  if (token.length >= 4) {
+    for (const a of roster) {
+      if (a.norm.length >= 4 && withinEditDistance(a.norm, token, 1)) return a.agent;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Resolve who a *voice* note is addressed to from its transcript, since speech
  * carries no `@tags`. People open by naming who they're talking to, then speak —
  * so only the **leading run** of the transcript is treated as the address:
@@ -50,11 +98,9 @@ export function resolveSpokenRecipients(transcript: string, roster: string[]): S
       continue;
     }
     if (CONNECTORS.has(t)) continue;
-    const match = normRoster.find(
-      ({ norm }) => t.length >= MIN_NAME_TOKEN && (norm.includes(t) || t.includes(norm)),
-    );
-    if (match) {
-      if (!recipients.includes(match.agent)) recipients.push(match.agent);
+    const agent = matchAgent(t, normRoster);
+    if (agent) {
+      if (!recipients.includes(agent)) recipients.push(agent);
       continue;
     }
     break; // first non-address token — the message body begins here

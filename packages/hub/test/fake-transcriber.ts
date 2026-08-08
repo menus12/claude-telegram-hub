@@ -6,11 +6,16 @@ import type { AudioInput, TranscriptionResult, TranscriptionService } from "../s
  */
 export class FakeTranscriptionService implements TranscriptionService {
   readonly calls: AudioInput[] = [];
+  readonly options: ({ lang?: string; prompt?: string } | undefined)[] = [];
 
   constructor(private readonly reply: string | ((audio: AudioInput) => string) = "") {}
 
-  transcribe(audio: AudioInput): Promise<TranscriptionResult> {
+  transcribe(
+    audio: AudioInput,
+    opts?: { lang?: string; prompt?: string },
+  ): Promise<TranscriptionResult> {
     this.calls.push(audio);
+    this.options.push(opts);
     const text = typeof this.reply === "function" ? this.reply(audio) : this.reply;
     return Promise.resolve({ text });
   }

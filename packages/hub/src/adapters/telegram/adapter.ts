@@ -41,6 +41,11 @@ export interface TelegramAdapterOptions {
    * (marked `voice`, empty text) so the hub can tell the operator voice is off.
    */
   transcriber?: TranscriptionService;
+  /**
+   * Live agent names, used to bias transcription toward them (short repo names like
+   * `kb` / `conn` transcribe badly without a hint). Called per voice note.
+   */
+  getAgents?: () => string[];
 }
 
 /**
@@ -248,12 +253,15 @@ export class TelegramAdapter implements TransportAdapter {
       this.opts.logger?.("warn", "voice note download failed");
       return "";
     }
+    // Prime the model with the live agent names so short repo tokens ("kb", "conn")
+    // transcribe correctly — the main way to address an agent by voice.
+    const agents = this.opts.getAgents?.() ?? [];
+    const prompt = agents.length > 0 ? `Agent names: ${agents.join(", ")}.` : undefined;
     try {
-      const { text } = await (this.opts.transcriber as TranscriptionService).transcribe({
-        bytes,
-        filename: "voice.ogg",
-        mimeType: voice.mimeType,
-      });
+      const { text } = await (this.opts.transcriber as TranscriptionService).transcribe(
+        { bytes, filename: "voice.ogg", mimeType: voice.mimeType },
+        ...(prompt ? [{ prompt }] : []),
+      );
       this.opts.logger?.("info", "transcribed voice note", {
         bytes: bytes.length,
         chars: text.length,
