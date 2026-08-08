@@ -22,6 +22,7 @@ import type {
 } from "@claude-telegram-hub/protocol";
 import type { TransportAdapter } from "./adapter.js";
 import { AccessController, KNOWN_COMMANDS, parseCommand, type ParsedCommand } from "./access.js";
+import { SettingsStore, TUNABLES, tunableByKey } from "./settings.js";
 import { AgentRegistry } from "./registry.js";
 import { LoopGovernor } from "./governor.js";
 import { PresenceTracker } from "./presence.js";
@@ -63,16 +64,9 @@ export class Hub {
   private readonly registry = new AgentRegistry();
   private readonly server: SessionServer;
   private readonly access: AccessController;
-  private readonly pairing: boolean;
-  private readonly notifyTarget: "dm" | "rooms" | "both";
-  private readonly broadcast: boolean;
+  private readonly settings: SettingsStore;
   private readonly voiceEnabled: boolean;
-  private readonly voiceEcho: boolean;
   private readonly synth: SynthesisService | undefined;
-  private readonly ttsMaxChars: number;
-  private readonly ttsAuto: boolean;
-  private readonly ttsVoiceDefault: string | undefined;
-  private readonly ttsVoiceMap: Record<string, string> | undefined;
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
@@ -88,16 +82,12 @@ export class Hub {
       ...(deps.config.stateFile ? { stateFile: deps.config.stateFile } : {}),
       logger: deps.logger,
     });
-    this.pairing = deps.config.pairing;
-    this.notifyTarget = deps.config.notify;
-    this.broadcast = deps.config.broadcast;
+    this.settings = new SettingsStore({
+      ...(deps.config.stateFile ? { stateFile: deps.config.stateFile } : {}),
+      logger: deps.logger,
+    });
     this.voiceEnabled = deps.config.sttUrl !== undefined;
-    this.voiceEcho = deps.config.voiceEcho;
     this.synth = deps.synth;
-    this.ttsMaxChars = deps.config.ttsMaxChars;
-    this.ttsAuto = deps.config.ttsAuto;
-    this.ttsVoiceDefault = deps.config.ttsVoice;
-    this.ttsVoiceMap = deps.config.ttsVoiceMap;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -131,10 +121,20 @@ export class Hub {
       keepaliveMs: deps.config.keepaliveMs,
       // Advertise voice-reply capability so the channel can tell a sending agent
       // when its voice:true reply won't be voiced (too long / unspeakable) (#74).
-      voiceReply: { enabled: this.synth !== undefined, maxChars: this.ttsMaxChars },
+      voiceReply: { enabled: this.synth !== undefined, maxChars: this.effective("ttsMaxChars") },
       isReady: () => this.started,
       logger: deps.logger,
     });
+  }
+
+  /**
+   * The effective value of a runtime-tunable config field: a `/set` override (a
+   * room override wins for room-scoped settings) if present, else the env-loaded
+   * baseline. Read at the point of use so a `/set` takes effect on the next message.
+   */
+  private effective<K extends keyof HubConfig>(field: K, room?: string): HubConfig[K] {
+    const override = this.settings.getOverride(field, room);
+    return (override ?? this.deps.config[field]) as HubConfig[K];
   }
 
   async start(): Promise<void> {
@@ -243,25 +243,6 @@ export class Hub {
       return;
     }
 
-    // `/voice on|off` is a per-room preference any allowed operator may set — not an
-    // admin action. (Commands bypass the access check, so gate it here.) (#70)
-    if (cmd.name === "voice") {
-      if (!this.access.isAllowed(fromId)) return void this.handleUnauthorized(message, false);
-      const arg = cmd.args[0]?.toLowerCase();
-      if (arg !== "on" && arg !== "off") {
-        return void this.replyNotice(room, "Usage: /voice on|off");
-      }
-      this.access.setRoomVoice(room, arg === "on");
-      this.deps.logger("info", "room voice preference set", { room, on: arg === "on" });
-      this.replyNotice(
-        room,
-        arg === "on"
-          ? "🔊 Voice replies on for this room."
-          : "🔇 Voice replies off for this room — replies will come as text.",
-      );
-      return;
-    }
-
     // All remaining commands are admin-only; non-admins are ignored.
     if (!this.access.isAdmin(fromId)) {
       this.deps.logger("info", "ignoring admin command from non-admin", { fromId, cmd: cmd.name });
@@ -269,6 +250,31 @@ export class Hub {
     }
 
     switch (cmd.name) {
+      case "config":
+        this.replyNotice(room, this.renderConfig(room));
+        return;
+      case "set":
+        this.handleSet(room, cmd.args, fromId);
+        return;
+      case "unset":
+        this.handleUnset(room, cmd.args, fromId);
+        return;
+      case "voice": {
+        // Friendly alias for the room-scoped voice toggle (#70). Admin-only (#config).
+        const arg = cmd.args[0]?.toLowerCase();
+        if (arg !== "on" && arg !== "off") {
+          return void this.replyNotice(room, "Usage: /voice on|off");
+        }
+        this.access.setRoomVoice(room, arg === "on");
+        this.deps.logger("info", "room voice preference set", { by: fromId, room, on: arg === "on" });
+        this.replyNotice(
+          room,
+          arg === "on"
+            ? "🔊 Voice replies on for this room."
+            : "🔇 Voice replies off for this room — replies will come as text.",
+        );
+        return;
+      }
       case "allowlist":
         this.replyNotice(room, `Allowed: ${this.access.listAllowed().join(", ") || "(none)"}`);
         return;
@@ -295,6 +301,67 @@ export class Hub {
     }
   }
 
+  /** Render the effective value of every runtime-tunable setting for `/config`. */
+  private renderConfig(room: string): string {
+    const lines = TUNABLES.map((t) => {
+      const override = this.settings.getOverride(t.field, room);
+      const value = t.format(override ?? this.deps.config[t.field]);
+      const scope = t.scope === "room" ? " [room]" : "";
+      const flag = override !== undefined ? " *" : "";
+      return `• ${t.key} = ${value}${scope}${flag}`;
+    });
+    const voiceOff = this.access.isRoomVoiceOff(room);
+    lines.push(`• voice = ${voiceOff ? "off" : "on"} [room]${voiceOff ? " *" : ""}`);
+    return [
+      "Settings (* = overridden; env baseline otherwise):",
+      ...lines,
+      "Change with /set <key> <value>, revert with /unset <key>.",
+    ].join("\n");
+  }
+
+  /** `/set <key> <value>` — validate against the tunable, apply, and persist. */
+  private handleSet(room: string, args: string[], by: string): void {
+    const key = args[0]?.toLowerCase();
+    if (!key || args.length < 2) {
+      return void this.replyNotice(room, "Usage: /set <key> <value> — /config lists keys.");
+    }
+    if (key === "voice") {
+      return void this.replyNotice(room, "Use /voice on|off for the per-room voice toggle.");
+    }
+    const tunable = tunableByKey(key);
+    if (!tunable) {
+      return void this.replyNotice(room, `Unknown or restart-only setting "${key}". /config lists what's tunable.`);
+    }
+    const raw = args.slice(1).join(" ");
+    let value: unknown;
+    try {
+      value = tunable.parse(raw);
+    } catch (err) {
+      return void this.replyNotice(room, `Invalid value for ${key}: ${(err as Error).message}`);
+    }
+    this.settings.set(tunable, value, room);
+    this.deps.logger("info", "setting changed", { by, key, scope: tunable.scope });
+    this.replyNotice(room, `✅ ${key} = ${tunable.format(value)}${tunable.scope === "room" ? " (this room)" : ""}.`);
+  }
+
+  /** `/unset <key>` — drop a runtime override, reverting to the env baseline. */
+  private handleUnset(room: string, args: string[], by: string): void {
+    const key = args[0]?.toLowerCase();
+    if (!key) return void this.replyNotice(room, "Usage: /unset <key>");
+    const tunable = tunableByKey(key);
+    if (!tunable) {
+      return void this.replyNotice(room, `Unknown setting "${key}".`);
+    }
+    const existed = this.settings.unset(tunable, room);
+    this.deps.logger("info", "setting reverted", { by, key, existed });
+    this.replyNotice(
+      room,
+      existed
+        ? `↩️ ${key} reverted to the deployment default (${tunable.format(this.deps.config[tunable.field])}).`
+        : `${key} had no override.`,
+    );
+  }
+
   /**
    * An unauthorized human reached the hub. With pairing on, queue them for admin
    * approval and notify admins; otherwise drop silently (an explicit `/start`
@@ -302,7 +369,7 @@ export class Hub {
    */
   private handleUnauthorized(message: InboundMessage, explicit: boolean): void {
     const { fromId, room } = message;
-    if (this.pairing) {
+    if (this.effective("pairing")) {
       if (this.access.addPending(fromId)) {
         this.notifyAdmins(`🔔 access request from ${fromId} — /allow ${fromId} to approve.`);
       }
@@ -333,10 +400,11 @@ export class Hub {
    * these reach the operator even in a DM-only deployment with no group.
    */
   private notify(notice: OutboundMessage): void {
-    if (this.notifyTarget === "dm" || this.notifyTarget === "both") {
+    const target = this.effective("notify");
+    if (target === "dm" || target === "both") {
       for (const adminId of this.access.adminIds()) this.replyNotice(adminId, notice.text);
     }
-    if (this.notifyTarget === "rooms" || this.notifyTarget === "both") {
+    if (target === "rooms" || target === "both") {
       this.postToRooms(notice);
     }
   }
@@ -399,17 +467,23 @@ export class Hub {
   private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
     // `voice: true`/`false` is an explicit choice; when unset, auto mode decides.
     // A room where an operator ran `/voice off` gets text regardless (#70).
-    const wantsVoice = (reply.voice ?? this.ttsAuto) && !this.access.isRoomVoiceOff(reply.room);
+    const wantsVoice =
+      (reply.voice ?? this.effective("ttsAuto")) && !this.access.isRoomVoiceOff(reply.room);
     if (wantsVoice && this.synth) {
       // Speak `voiceText` when the agent gave a distinct spoken form; otherwise a
       // sanitized `text`. Either way `text` stays the caption / source of truth (#68).
       const source = reply.voiceText ?? reply.text;
-      const spoken = speakableText(source, this.ttsMaxChars);
+      const maxChars = this.effective("ttsMaxChars");
+      const spoken = speakableText(source, maxChars);
       if (spoken) {
         try {
           // Pick a voice matching the reply's language for a bilingual room (#71);
           // no map → the synth's default voice.
-          const voice = pickVoice(spoken, this.ttsVoiceDefault, this.ttsVoiceMap);
+          const voice = pickVoice(
+            spoken,
+            this.effective("ttsVoice"),
+            this.effective("ttsVoiceMap"),
+          );
           const { audio, mimeType } = await this.synth.synthesize(
             spoken,
             voice ? { voice } : {},
@@ -430,7 +504,7 @@ export class Hub {
         this.deps.logger("info", "voiced reply not speakable; posting text", {
           agent,
           chars: source.length,
-          maxChars: this.ttsMaxChars,
+          maxChars,
         });
       }
     } else if (reply.voice === true && !this.synth) {
@@ -441,7 +515,7 @@ export class Hub {
 
   /** Whether the mention set carries an enabled broadcast token (`@all`, …). */
   private hasBroadcast(mentions: string[]): boolean {
-    return this.broadcast && mentions.some(isBroadcastMention);
+    return this.effective("broadcast") && mentions.some(isBroadcastMention);
   }
 
   /** Expand a broadcast mention set to every live agent, keeping any explicit names. */
@@ -477,7 +551,7 @@ export class Hub {
       this.replyNotice(room, voiceUnaddressedNotice().text);
       return false;
     }
-    if (this.voiceEcho) {
+    if (this.effective("voiceEcho")) {
       this.replyNotice(room, transcriptEchoNotice(message.mentions, message.text).text);
     }
     this.deps.logger("info", "voice note routed", {
@@ -522,7 +596,7 @@ export class Hub {
     // it; the human already sees the visible copy posted above. Broadcast is an
     // operator-only primitive — drop any broadcast token from an agent's mentions
     // so a single reply can't fan out to the whole room.
-    const mentions = this.broadcast
+    const mentions = this.effective("broadcast")
       ? reply.mentions.filter((m) => !isBroadcastMention(m))
       : reply.mentions;
     const peers = mentions.filter((m) => m !== agent);

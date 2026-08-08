@@ -138,11 +138,18 @@ Admins (`HUB_ADMINS`, defaulting to the `HUB_ALLOWLIST` seed) can adjust the all
 - `/allowlist` — list who's allowed. `/pending` — list access requests.
 - `/start` — tells a user whether they're authorized (and their id).
 
-Any allowed operator (not just admins) can also set a per-room voice preference:
+### Tuning features from chat
 
-- `/voice off` — voiced replies in **this room** come as text instead; `/voice on` restores. Useful when the deployment has TTS on (or `HUB_TTS_AUTO`) but this room shouldn't be spoken aloud right now.
+Admins can also change **runtime-tunable settings** without a redeploy — the env value is the baseline; a `/set` layers an override on top:
 
-Set `HUB_STATE_FILE` (a path on a mounted volume for containers) so runtime changes **survive a restart**. With `HUB_PAIRING=on`, an unknown sender is queued and admins are pinged (`/allow <id>` to approve) instead of being dropped silently.
+- `/config` — list every tunable setting with its effective value (`*` marks an override).
+- `/set <key> <value>` — override a setting (validated); e.g. `/set ttsauto on`, `/set ttsmaxchars 400`, `/set ttsvoicemap en:af_sky,ru:af_ru`. Room-scoped keys apply to the room the command is sent in.
+- `/unset <key>` — drop the override, reverting to the deployment default.
+- `/voice on|off` — friendly alias for the per-room voice toggle (voiced replies in **this room** come as text when off).
+
+Tunable today: `broadcast`, `voiceecho`, `pairing`, `ttsauto`, `notify`, `ttsmaxchars`, `ttsvoice`, `ttsvoicemap` (and the room `voice` toggle). Infrastructure and secrets (bind address, session secret, adapter, STT/TTS URLs + keys) are **boot-only** — `/set` refuses them; change those via env and restart.
+
+Set `HUB_STATE_FILE` (a path on a mounted volume for containers) so runtime changes (allowlist **and** settings) **survive a restart**. With `HUB_PAIRING=on`, an unknown sender is queued and admins are pinged (`/allow <id>` to approve) instead of being dropped silently.
 
 > **How agents should behave in the room** — quiet by default, and don't let a request die in that
 > silence — is the [coordination protocol](coordination.md). Reference it from each project's agent

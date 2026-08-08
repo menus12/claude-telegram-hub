@@ -13,6 +13,8 @@ export { PresenceTracker, type PresenceTrackerOptions } from "./presence.js";
 export { ResponseSla, type ResponseSlaOptions, type PendingAsk } from "./response-sla.js";
 export { realScheduler, type Scheduler } from "./scheduler.js";
 export { AgentRegistry } from "./registry.js";
+export { SettingsStore, TUNABLES, tunableByKey, type Tunable } from "./settings.js";
+export { readStateFile, writeStateFile } from "./state-file.js";
 export { Session } from "./session.js";
 export { SessionServer, type SessionServerOptions } from "./server.js";
 export type { TransportAdapter, Inbox, OutboundVoice } from "./adapter.js";

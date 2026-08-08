@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readStateFile, writeStateFile } from "./state-file.js";
 import type { Logger } from "./logger.js";
 
 /** The in-chat commands the hub understands. */
@@ -10,6 +9,9 @@ export const KNOWN_COMMANDS = new Set([
   "allowlist",
   "pending",
   "voice",
+  "config",
+  "set",
+  "unset",
 ]);
 
 export interface ParsedCommand {
@@ -135,9 +137,9 @@ export class AccessController {
   }
 
   private load(): void {
-    if (!this.stateFile || !existsSync(this.stateFile)) return;
+    if (!this.stateFile) return;
     try {
-      const raw = JSON.parse(readFileSync(this.stateFile, "utf8")) as Partial<PersistShape>;
+      const raw = readStateFile(this.stateFile) as Partial<PersistShape>;
       for (const id of raw.allow ?? []) this.allow.add(id);
       for (const id of raw.denied ?? []) this.denied.add(id);
       for (const id of raw.pending ?? []) this.pending.add(id);
@@ -149,14 +151,13 @@ export class AccessController {
 
   private writeState(): void {
     if (!this.stateFile) return;
-    const data: PersistShape = {
+    // Merge only our section; the settings store owns `settings` in the same file.
+    writeStateFile(this.stateFile, {
       allow: [...this.allow],
       denied: [...this.denied],
       pending: [...this.pending],
       voiceOff: [...this.voiceOff],
-    };
-    mkdirSync(dirname(this.stateFile), { recursive: true });
-    writeFileSync(this.stateFile, JSON.stringify(data, null, 2));
+    } satisfies PersistShape);
   }
 
   private persist(): void {

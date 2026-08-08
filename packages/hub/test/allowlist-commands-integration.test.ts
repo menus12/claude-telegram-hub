@@ -170,3 +170,48 @@ describe("in-chat allowlist commands", () => {
     }
   });
 });
+
+describe("in-chat config commands (/config, /set, /unset)", () => {
+  it("lists settings, validates a set, and reverts on unset (admin)", async () => {
+    const { adapter } = await startHub();
+
+    await adapter.deliver(msg("admin1", "/config"));
+    await waitFor(() => text(adapter, (t) => t.includes("Settings")) !== undefined);
+    expect(text(adapter, (t) => t.includes("ttsmaxchars = 300"))).toBeDefined(); // env baseline
+
+    await adapter.deliver(msg("admin1", "/set ttsmaxchars 400"));
+    await waitFor(() => text(adapter, (t) => t.includes("ttsmaxchars = 400")) !== undefined);
+
+    await adapter.deliver(msg("admin1", "/config"));
+    await waitFor(
+      () => text(adapter, (t) => t.includes("ttsmaxchars = 400") && t.includes("*")) !== undefined,
+    );
+
+    await adapter.deliver(msg("admin1", "/unset ttsmaxchars"));
+    await waitFor(() => text(adapter, (t) => t.includes("reverted")) !== undefined);
+  });
+
+  it("rejects an invalid value, an unknown key, and a boot-only field", async () => {
+    const { adapter } = await startHub();
+
+    await adapter.deliver(msg("admin1", "/set ttsmaxchars nope"));
+    await waitFor(() => text(adapter, (t) => t.includes("Invalid value")) !== undefined);
+
+    await adapter.deliver(msg("admin1", "/set bogus on"));
+    await waitFor(() => text(adapter, (t) => t.includes("Unknown or restart-only")) !== undefined);
+
+    // a real config field that is boot-only isn't tunable
+    await adapter.deliver(msg("admin1", "/set bindport 9999"));
+    await waitFor(
+      () =>
+        adapter.sent.filter((s) => s.out.text.includes("Unknown or restart-only")).length >= 2,
+    );
+  });
+
+  it("ignores /set from a non-admin", async () => {
+    const { adapter } = await startHub();
+    await adapter.deliver(msg("stranger", "/set ttsauto on"));
+    await delay(20);
+    expect(text(adapter, (t) => t.includes("ttsauto"))).toBeUndefined();
+  });
+});
