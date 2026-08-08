@@ -147,7 +147,12 @@ Admins can also change **runtime-tunable settings** without a redeploy — the e
 - `/unset <key>` — drop the override, reverting to the deployment default.
 - `/voice on|off` — friendly alias for the per-room voice toggle (voiced replies in **this room** come as text when off).
 
-Tunable today: `broadcast`, `voiceecho`, `pairing`, `ttsauto`, `notify`, `ttsmaxchars`, `ttsvoice`, `ttsvoicemap` (and the room `voice` toggle). Infrastructure and secrets (bind address, session secret, adapter, STT/TTS URLs + keys) are **boot-only** — `/set` refuses them; change those via env and restart.
+Tunable today:
+
+- **Behavioural** (take effect on the next message): `broadcast`, `voiceecho`, `pairing`, `ttsauto`, `notify`, `ttsmaxchars`, `ttsvoice`, `ttsvoicemap`, and the room `voice` toggle.
+- **Backstops** (reconfigure the live component): `sla`, `ackslams`, `answerslams`, `presence`, `presencegracems`, `hopbudget`, `keepalivems`.
+
+Infrastructure and secrets (bind address, session secret, adapter, STT/TTS URLs + keys) are **boot-only** — `/set` refuses them; change those via env and restart.
 
 Set `HUB_STATE_FILE` (a path on a mounted volume for containers) so runtime changes (allowlist **and** settings) **survive a restart**. With `HUB_PAIRING=on`, an unknown sender is queued and admins are pinged (`/allow <id>` to approve) instead of being dropped silently.
 

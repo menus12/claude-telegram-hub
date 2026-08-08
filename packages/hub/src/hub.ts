@@ -68,8 +68,10 @@ export class Hub {
   private readonly voiceEnabled: boolean;
   private readonly synth: SynthesisService | undefined;
   private readonly governor: LoopGovernor;
-  private readonly presence: PresenceTracker | undefined;
-  private readonly sla: ResponseSla | undefined;
+  // Presence and SLA are always constructed so they can be toggled at runtime;
+  // their entry points are gated on the effective `presence`/`sla` setting.
+  private readonly presence: PresenceTracker;
+  private readonly sla: ResponseSla;
   private started = false;
 
   constructor(private readonly deps: HubDeps) {
@@ -89,24 +91,20 @@ export class Hub {
     this.voiceEnabled = deps.config.sttUrl !== undefined;
     this.synth = deps.synth;
     this.governor = new LoopGovernor(deps.config.hopBudget);
-    this.sla = deps.config.sla
-      ? new ResponseSla({
-          ackSlaMs: deps.config.ackSlaMs,
-          answerSlaMs: deps.config.answerSlaMs,
-          nudge: (ask) => this.nudgePeer(ask),
-          escalate: (ask) => this.escalateAsk(ask),
-          ...(deps.scheduler ? { schedule: deps.scheduler } : {}),
-        })
-      : undefined;
-    // Presence is opt-in; delivery goes through notify() (admin DMs and/or rooms),
-    // so it works even with no group configured.
-    this.presence = deps.config.presence
-      ? new PresenceTracker({
-          graceMs: deps.config.presenceGraceMs,
-          isLive: (agent) => this.registry.has(agent),
-          emit: (notice) => this.notify(notice),
-        })
-      : undefined;
+    this.sla = new ResponseSla({
+      ackSlaMs: deps.config.ackSlaMs,
+      answerSlaMs: deps.config.answerSlaMs,
+      nudge: (ask) => this.nudgePeer(ask),
+      escalate: (ask) => this.escalateAsk(ask),
+      ...(deps.scheduler ? { schedule: deps.scheduler } : {}),
+    });
+    // Presence delivery goes through notify() (admin DMs and/or rooms), so it works
+    // even with no group configured. Both are gated on the effective setting below.
+    this.presence = new PresenceTracker({
+      graceMs: deps.config.presenceGraceMs,
+      isLive: (agent) => this.registry.has(agent),
+      emit: (notice) => this.notify(notice),
+    });
     this.server = new SessionServer({
       host: deps.config.bindHost,
       port: deps.config.bindPort,
@@ -114,8 +112,12 @@ export class Hub {
       registry: this.registry,
       onReply: (agent, reply) => this.onReply(agent, reply),
       onSendFile: (agent, frame) => this.onSendFile(agent, frame),
-      onRegister: (agent) => this.presence?.onConnect(agent),
-      onDetach: (agent) => this.presence?.onDetach(agent),
+      onRegister: (agent) => {
+        if (this.effective("presence")) this.presence.onConnect(agent);
+      },
+      onDetach: (agent) => {
+        if (this.effective("presence")) this.presence.onDetach(agent);
+      },
       onDuplicateRejected: (agent) => this.notify(duplicateRegistrationNotice(agent)),
       duplicateName: deps.config.duplicateName,
       keepaliveMs: deps.config.keepaliveMs,
@@ -146,8 +148,8 @@ export class Hub {
 
   async stop(): Promise<void> {
     this.started = false;
-    this.presence?.stop();
-    this.sla?.stop();
+    this.presence.stop();
+    this.sla.stop();
     await this.deps.adapter.stop();
     await this.server.close();
     this.deps.logger("info", "hub stopped");
@@ -339,7 +341,17 @@ export class Hub {
     } catch (err) {
       return void this.replyNotice(room, `Invalid value for ${key}: ${(err as Error).message}`);
     }
+    // Keep the SLA invariant answerSlaMs > ackSlaMs (the same cross-field check the
+    // env loader enforces), against the *other* field's effective value.
+    if (tunable.field === "ackSlaMs" || tunable.field === "answerSlaMs") {
+      const ack = tunable.field === "ackSlaMs" ? (value as number) : this.effective("ackSlaMs");
+      const answer = tunable.field === "answerSlaMs" ? (value as number) : this.effective("answerSlaMs");
+      if (answer <= ack) {
+        return void this.replyNotice(room, `answerslams (${answer}) must be greater than ackslams (${ack}).`);
+      }
+    }
     this.settings.set(tunable, value, room);
+    this.applyTunable(tunable.field);
     this.deps.logger("info", "setting changed", { by, key, scope: tunable.scope });
     this.replyNotice(room, `✅ ${key} = ${tunable.format(value)}${tunable.scope === "room" ? " (this room)" : ""}.`);
   }
@@ -353,6 +365,7 @@ export class Hub {
       return void this.replyNotice(room, `Unknown setting "${key}".`);
     }
     const existed = this.settings.unset(tunable, room);
+    this.applyTunable(tunable.field);
     this.deps.logger("info", "setting reverted", { by, key, existed });
     this.replyNotice(
       room,
@@ -360,6 +373,35 @@ export class Hub {
         ? `↩️ ${key} reverted to the deployment default (${tunable.format(this.deps.config[tunable.field])}).`
         : `${key} had no override.`,
     );
+  }
+
+  /**
+   * Push a Tier-2 setting change into its live component (Tier-1 settings are read
+   * at the point of use, so they fall through as a no-op). Called after a `/set` or
+   * `/unset` with the effective (post-change) values.
+   */
+  private applyTunable(field: keyof HubConfig): void {
+    switch (field) {
+      case "sla":
+        if (!this.effective("sla")) this.sla.stop(); // cancel pending watches when disabled
+        break;
+      case "presence":
+        if (!this.effective("presence")) this.presence.stop();
+        break;
+      case "ackSlaMs":
+      case "answerSlaMs":
+        this.sla.reconfigure(this.effective("ackSlaMs"), this.effective("answerSlaMs"));
+        break;
+      case "presenceGraceMs":
+        this.presence.reconfigure(this.effective("presenceGraceMs"));
+        break;
+      case "hopBudget":
+        this.governor.reconfigure(this.effective("hopBudget"));
+        break;
+      case "keepaliveMs":
+        this.server.reconfigure(this.effective("keepaliveMs"));
+        break;
+    }
   }
 
   /**
@@ -578,7 +620,7 @@ export class Hub {
   private onReply(agent: string, reply: ReplyFrame): void {
     // 0) The speaker just produced a reply → satisfy any SLA ask that was waiting
     // on it in this room (an ETA ack and a full answer both count as "spoke").
-    this.sla?.onAgentSpoke(reply.room, agent);
+    this.sla.onAgentSpoke(reply.room, agent);
 
     // 1) Post the human-visible copy — a captioned voice note if the agent asked
     // (and it's speakable), otherwise text.
@@ -623,8 +665,8 @@ export class Hub {
       // Watch each delivered ask (peer online) for a response. Offline peers
       // already got an immediate in-room notice, so there's nothing to wait on.
       for (const peer of peers) {
-        if (this.registry.has(peer)) {
-          this.sla?.openAsk({ room: reply.room, from: agent, to: peer, text: reply.text });
+        if (this.effective("sla") && this.registry.has(peer)) {
+          this.sla.openAsk({ room: reply.room, from: agent, to: peer, text: reply.text });
         }
       }
       if (decision.froze) {

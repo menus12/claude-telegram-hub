@@ -76,11 +76,21 @@ export class SessionServer {
   /** Per-connection liveness: set true on pong, false when a ping is sent. */
   private readonly alive = new WeakMap<WebSocket, boolean>();
   private keepaliveTimer: ReturnType<typeof setInterval> | undefined;
+  private keepaliveMs: number;
 
   constructor(private readonly opts: SessionServerOptions) {
+    this.keepaliveMs = opts.keepaliveMs ?? 30_000;
     this.http = createServer((req, res) => this.handleHttp(req, res));
     this.wss = new WebSocketServer({ server: this.http });
     this.wss.on("connection", (ws) => this.onConnection(ws));
+  }
+
+  /** Change the keepalive interval at runtime, restarting the timer. `0` disables. */
+  reconfigure(keepaliveMs: number): void {
+    this.keepaliveMs = keepaliveMs;
+    if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
+    this.keepaliveTimer = undefined;
+    this.startKeepalive();
   }
 
   async listen(): Promise<void> {
@@ -102,7 +112,7 @@ export class SessionServer {
    * ponged since the last tick is terminated (its `close` unregisters it normally).
    */
   private startKeepalive(): void {
-    const interval = this.opts.keepaliveMs ?? 30_000;
+    const interval = this.keepaliveMs;
     if (interval <= 0) return;
     this.keepaliveTimer = setInterval(() => {
       for (const ws of this.wss.clients) {
