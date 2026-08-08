@@ -28,18 +28,39 @@ export interface TranscriptionService {
 }
 
 export interface HttpTranscriptionOptions {
-  /** Service base URL; `/v1/audio/transcriptions` is appended. */
+  /**
+   * Service base URL — `/v1/audio/transcriptions` is appended, unless the URL is
+   * already a full endpoint (contains `/audio/transcriptions`), in which case it's
+   * used verbatim (for cloud endpoints with a non-standard path).
+   */
   url: string;
   /** Model name sent to the service (e.g. `small`, `medium`). */
   model: string;
   /** Default language: `auto` (omit → detect) or an ISO code. */
   defaultLang?: string;
+  /** API key for a cloud service; sent as `Authorization: Bearer …` by default. */
+  apiKey?: string;
+  /** Auth header name; override to `api-key` for Azure OpenAI. Default `Authorization`. */
+  authHeader?: string;
   /** Request timeout; defaults to 60s. */
   timeoutMs?: number;
   logger?: Logger;
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+
+/** Build the auth header for a cloud service (Bearer by default, or a raw value). */
+export function authHeaders(apiKey?: string, header?: string): Record<string, string> {
+  if (!apiKey) return {};
+  const name = header ?? "Authorization";
+  const value = name.toLowerCase() === "authorization" ? `Bearer ${apiKey}` : apiKey;
+  return { [name]: value };
+}
+
+/** A full endpoint (already contains the audio path) is used as-is; else append `path`. */
+export function resolveEndpoint(url: string, path: string): string {
+  return /\/audio\/(transcriptions|speech)\b/.test(url) ? url : `${url.replace(/\/$/, "")}${path}`;
+}
 
 /**
  * A {@link TranscriptionService} for any OpenAI-compatible transcription endpoint
@@ -52,7 +73,7 @@ export class HttpTranscriptionService implements TranscriptionService {
   private readonly endpoint: string;
 
   constructor(private readonly opts: HttpTranscriptionOptions) {
-    this.endpoint = `${opts.url.replace(/\/$/, "")}/v1/audio/transcriptions`;
+    this.endpoint = resolveEndpoint(opts.url, "/v1/audio/transcriptions");
   }
 
   async transcribe(audio: AudioInput, opts?: { lang?: string }): Promise<TranscriptionResult> {
@@ -65,6 +86,7 @@ export class HttpTranscriptionService implements TranscriptionService {
 
     const res = await fetch(this.endpoint, {
       method: "POST",
+      headers: authHeaders(this.opts.apiKey, this.opts.authHeader),
       body: form,
       signal: AbortSignal.timeout(this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });

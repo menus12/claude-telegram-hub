@@ -6,6 +6,7 @@ interface Captured {
   method?: string;
   url?: string;
   body: string;
+  headers: Record<string, string | string[] | undefined>;
 }
 
 let server: Server | undefined;
@@ -18,10 +19,11 @@ afterEach(async () => {
 async function startServer(
   respond: (captured: Captured) => { status: number; audio?: Buffer },
 ): Promise<{ url: string; captured: Captured }> {
-  const captured: Captured = { body: "" };
+  const captured: Captured = { body: "", headers: {} };
   server = createServer((req, res) => {
     captured.method = req.method;
     captured.url = req.url;
+    captured.headers = req.headers;
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
@@ -86,5 +88,12 @@ describe("HttpSynthesisService", () => {
     const svc = new HttpSynthesisService({ url: `${url}/`, model: "m", voice: "v" });
     await svc.synthesize("hi");
     expect(captured.url).toBe("/v1/audio/speech");
+  });
+
+  it("sends an API key as a Bearer token for a cloud service", async () => {
+    const { url, captured } = await startServer(() => ({ status: 200, audio: Buffer.from("x") }));
+    const svc = new HttpSynthesisService({ url, model: "tts-1", voice: "alloy", apiKey: "sk-xyz" });
+    await svc.synthesize("hi");
+    expect(captured.headers.authorization).toBe("Bearer sk-xyz");
   });
 });

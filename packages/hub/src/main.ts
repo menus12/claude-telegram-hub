@@ -27,6 +27,8 @@ function buildAdapter(
             url: cfg.sttUrl,
             model: cfg.sttModel,
             defaultLang: cfg.sttLang,
+            ...(cfg.sttApiKey ? { apiKey: cfg.sttApiKey } : {}),
+            ...(cfg.sttAuthHeader ? { authHeader: cfg.sttAuthHeader } : {}),
             logger: log,
           })
         : undefined;
@@ -55,6 +57,8 @@ async function main(): Promise<void> {
           model: cfg.ttsModel,
           voice: cfg.ttsVoice,
           format: cfg.ttsFormat,
+          ...(cfg.ttsApiKey ? { apiKey: cfg.ttsApiKey } : {}),
+          ...(cfg.ttsAuthHeader ? { authHeader: cfg.ttsAuthHeader } : {}),
           logger: log,
         })
       : undefined;
