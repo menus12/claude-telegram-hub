@@ -164,6 +164,8 @@ a second channel — the same "match verbosity to the medium" rule (A6) governs 
    respell abbreviations and jargon a listener can't parse (`CAE` → "Container Apps", `ASAv` → "the
    Cisco ASA virtual appliance"). Keep **hex strings, IPs, code, paths, links, and exact values out of
    the spoken part** — say the gist, and put the precise values in the text/caption that rides along.
+   When the natural spoken form differs from what you display, pass `voiceText` (the words to speak)
+   alongside `text` (the exact detail, kept as the caption) rather than compromising one for the other.
 3. **Gist + next action, within the cap.** A voiced reply is a short spoken summary (what happened,
    what's next), not the full detail. The hub voices only up to a length cap and skips code/links/long
    text, so keep it brief and speakable; the detail belongs in text.

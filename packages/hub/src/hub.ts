@@ -370,7 +370,10 @@ export class Hub {
    */
   private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
     if (reply.voice && this.synth) {
-      const spoken = speakableText(reply.text, this.ttsMaxChars);
+      // Speak `voiceText` when the agent gave a distinct spoken form; otherwise a
+      // sanitized `text`. Either way `text` stays the caption / source of truth (#68).
+      const source = reply.voiceText ?? reply.text;
+      const spoken = speakableText(source, this.ttsMaxChars);
       if (spoken) {
         try {
           const { audio, mimeType } = await this.synth.synthesize(spoken);
@@ -388,7 +391,7 @@ export class Hub {
         // note is then diagnosable rather than a silent fallback (#67).
         this.deps.logger("info", "voiced reply not speakable; posting text", {
           agent,
-          chars: reply.text.length,
+          chars: source.length,
           maxChars: this.ttsMaxChars,
         });
       }

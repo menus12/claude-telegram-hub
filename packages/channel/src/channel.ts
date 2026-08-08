@@ -36,6 +36,8 @@ const INSTRUCTIONS = [
   "(e.g. `CAE` -> \"Container Apps\"), keep it to a short gist + next action, and keep hex strings,",
   "IPs, code, paths, links, and exact values OUT of the spoken text (they ride along in the message",
   "text). Don't voice code, links, lists, or long/technical replies — those stay text-only.",
+  "If the natural spoken form differs from what you display, pass `voiceText` with the words to",
+  "speak while `text` keeps the exact detail (values, links) as the caption.",
 ].join(" ");
 
 /**
@@ -100,7 +102,16 @@ export function parseReplyArgs(args: unknown): ReplyInput {
   if (a.voice !== undefined && typeof a.voice !== "boolean") {
     throw new Error("reply: `voice` must be a boolean");
   }
-  return { room: a.room, text: a.text, mentions, ...(a.voice ? { voice: true } : {}) };
+  if (a.voiceText !== undefined && typeof a.voiceText !== "string") {
+    throw new Error("reply: `voiceText` must be a string");
+  }
+  return {
+    room: a.room,
+    text: a.text,
+    mentions,
+    ...(a.voice ? { voice: true } : {}),
+    ...(a.voiceText ? { voiceText: a.voiceText } : {}),
+  };
 }
 
 export interface SendFileArgs {
@@ -221,6 +232,11 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
               description:
                 "Also send this reply as a voice note. Use for a short, spoken-appropriate message — a gist + next action, a couple of sentences — especially when replying to a voice message. Write `text` for the ear: expand abbreviations, keep hex/IPs/code/links/exact-values out. It must stay under the hub's character cap and be speakable; code, links, lists, or long text can't be voiced and post as text. The tool result tells you whether it went out as voice or fell back to text (and why), so you can shorten and re-send if needed.",
             },
+            voiceText: {
+              type: "string",
+              description:
+                "Optional: the exact words to speak when `voice` is set, if the natural spoken form differs from the displayed `text` — e.g. display \"deployed abc123, logs at <link>\" but say \"deployed to prod\". When omitted, the hub speaks a sanitized `text`. `text` stays the caption; `voiceText` is still subject to the length/speakability limits.",
+            },
           },
           required: ["room", "text"],
         },
@@ -264,7 +280,9 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
       // unknown, so stay neutral rather than claim a wrong outcome.
       const caps = hub.voiceReplyCaps();
       if (reply.voice && caps) {
-        const outcome = checkVoiceReply(reply.text, caps);
+        // The hub voices `voiceText` when given, else a sanitized `text` — predict
+        // against whichever it will actually speak (#68).
+        const outcome = checkVoiceReply(reply.voiceText ?? reply.text, caps);
         if (!outcome.voiced) {
           log("info", "voiced reply will post as text", {
             room: reply.room,

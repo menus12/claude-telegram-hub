@@ -178,6 +178,14 @@ describe("parseReplyArgs", () => {
     expect(parseReplyArgs({ room: "r", text: "t" }).voice).toBeUndefined();
     expect(() => parseReplyArgs({ room: "r", text: "t", voice: "yes" })).toThrow(/voice/);
   });
+
+  it("passes through voiceText and rejects a non-string (#68)", () => {
+    expect(
+      parseReplyArgs({ room: "r", text: "t", voice: true, voiceText: "say this" }).voiceText,
+    ).toBe("say this");
+    expect(parseReplyArgs({ room: "r", text: "t" }).voiceText).toBeUndefined();
+    expect(() => parseReplyArgs({ room: "r", text: "t", voiceText: 5 })).toThrow(/voiceText/);
+  });
 });
 
 describe("MCP wiring (in-memory)", () => {

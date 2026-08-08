@@ -40,6 +40,13 @@ export const replyFrameSchema = z.object({
    * re-injection stays text.
    */
   voice: z.boolean().optional(),
+  /**
+   * The exact words to *speak* when `voice` is set, if they should differ from the
+   * displayed `text` — e.g. display "deployed abc123, logs at <link>" but say
+   * "deployed to prod". When absent the hub speaks a sanitized `text`. Still
+   * subject to the length/speakability guards; `text` remains the caption. (#68)
+   */
+  voiceText: z.string().optional(),
 });
 export type ReplyFrame = z.infer<typeof replyFrameSchema>;
 
