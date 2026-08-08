@@ -193,6 +193,7 @@ describe("MCP wiring (in-memory)", () => {
           stop() {},
           sendReply: (reply) => void sent.push(reply),
           sendFile() {},
+          voiceReplyCaps: () => undefined,
         };
       },
     });
@@ -226,6 +227,52 @@ describe("MCP wiring (in-memory)", () => {
     await channel.mcp.close();
   });
 
+  it("tells the sending agent whether a voice:true reply went out as voice or fell back (#74)", async () => {
+    const caps = { enabled: true, maxChars: 300 };
+    const channel = buildChannel(cfg(), {
+      logger: () => {},
+      createHub: () => ({
+        start() {},
+        stop() {},
+        sendReply() {},
+        sendFile() {},
+        voiceReplyCaps: () => caps,
+      }),
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await channel.mcp.connect(serverTransport);
+    const client = new Client({ name: "test", version: "0.0.0" }, { capabilities: {} });
+    await client.connect(clientTransport);
+
+    const textOf = (r: Awaited<ReturnType<typeof client.callTool>>): string =>
+      (r.content as { type: string; text: string }[]).map((c) => c.text).join("");
+
+    // short speakable → voiced
+    const ok = await client.callTool({
+      name: "reply",
+      arguments: { room: "-100", text: "done, deployed to prod", voice: true },
+    });
+    expect(textOf(ok)).toContain("as a voice note");
+
+    // over the cap → falls back, and the result says why (with the numbers)
+    const long = await client.callTool({
+      name: "reply",
+      arguments: { room: "-100", text: "word ".repeat(100), voice: true },
+    });
+    expect(textOf(long)).toContain("NOT as a voice note");
+    expect(textOf(long)).toContain("300-char cap");
+
+    // a plain text reply is unaffected
+    const plain = await client.callTool({
+      name: "reply",
+      arguments: { room: "-100", text: "hello" },
+    });
+    expect(textOf(plain)).toBe("delivered to hub");
+
+    await client.close();
+    await channel.mcp.close();
+  });
+
   it("exposes a send_file tool that reads a local file and forwards bytes to the hub", async () => {
     const files: SendFileInput[] = [];
     const channel = buildChannel(cfg(), {
@@ -235,6 +282,7 @@ describe("MCP wiring (in-memory)", () => {
         stop() {},
         sendReply() {},
         sendFile: (f) => void files.push(f),
+        voiceReplyCaps: () => undefined,
       }),
     });
 
@@ -275,7 +323,7 @@ describe("MCP wiring (in-memory)", () => {
       logger: () => {},
       createHub: (evts) => {
         events = evts;
-        return { start() {}, stop() {}, sendReply() {}, sendFile() {} };
+        return { start() {}, stop() {}, sendReply() {}, sendFile() {}, voiceReplyCaps: () => undefined };
       },
     });
     const noteSpy = vi.spyOn(channel.mcp, "notification").mockResolvedValue(undefined);

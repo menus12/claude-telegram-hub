@@ -8,6 +8,7 @@ import {
   type InboundFrame,
   type LogLevel,
   type SessionToHubFrame,
+  type VoiceReplyCapsFrame,
 } from "@claude-telegram-hub/protocol";
 
 export interface ReplyInput {
@@ -31,6 +32,12 @@ export interface HubLike {
   stop(): void;
   sendReply(reply: ReplyInput): void;
   sendFile(input: SendFileInput): void;
+  /**
+   * Voice-reply capability advertised by the hub at registration, or `undefined`
+   * before registering / from an older hub. Lets the channel tell a sending agent
+   * when a `voice: true` reply won't be voiced (#74).
+   */
+  voiceReplyCaps(): VoiceReplyCapsFrame | undefined;
 }
 
 export interface HubClientEvents {
@@ -52,6 +59,7 @@ export class HubClient implements HubLike {
   private stopped = false;
   private backoffMs: number;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private voiceReply: VoiceReplyCapsFrame | undefined;
 
   constructor(
     private readonly cfg: ChannelConfig,
@@ -82,6 +90,10 @@ export class HubClient implements HubLike {
       ...(reply.replyToId ? { replyToId: reply.replyToId } : {}),
       ...(reply.voice ? { voice: true } : {}),
     });
+  }
+
+  voiceReplyCaps(): VoiceReplyCapsFrame | undefined {
+    return this.voiceReply;
   }
 
   sendFile(input: SendFileInput): void {
@@ -135,6 +147,7 @@ export class HubClient implements HubLike {
     const frame = parsed.data;
     switch (frame.type) {
       case "registered":
+        this.voiceReply = frame.voiceReply;
         this.events.onRegistered?.(frame.agent);
         break;
       case "inbound":

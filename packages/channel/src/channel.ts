@@ -4,6 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { checkVoiceReply } from "@claude-telegram-hub/protocol";
 import type { ChannelConfig, InboundFrame } from "@claude-telegram-hub/protocol";
 import {
   HubClient,
@@ -218,7 +219,7 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
             voice: {
               type: "boolean",
               description:
-                "Also send this reply as a voice note. Use for a short, spoken-appropriate message — a gist + next action — especially when replying to a voice message. Write `text` for the ear: expand abbreviations, keep hex/IPs/code/links/exact-values out. Not for code, links, lists, or long text (the hub skips voicing those and posts text). Requires the hub to have TTS enabled.",
+                "Also send this reply as a voice note. Use for a short, spoken-appropriate message — a gist + next action, a couple of sentences — especially when replying to a voice message. Write `text` for the ear: expand abbreviations, keep hex/IPs/code/links/exact-values out. It must stay under the hub's character cap and be speakable; code, links, lists, or long text can't be voiced and post as text. The tool result tells you whether it went out as voice or fell back to text (and why), so you can shorten and re-send if needed.",
             },
           },
           required: ["room", "text"],
@@ -256,6 +257,30 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
       const reply = parseReplyArgs(req.params.arguments);
       hub.sendReply(reply);
       log("info", "reply sent to hub", { room: reply.room });
+      // Close the loop back to the sending agent: the hub decides voice-vs-text from
+      // length/speakability, so predict it here and say so — otherwise the agent
+      // believes it replied by voice when it actually fell back to text (#74). Only
+      // when the hub advertised its caps; an older hub / pre-registration leaves them
+      // unknown, so stay neutral rather than claim a wrong outcome.
+      const caps = hub.voiceReplyCaps();
+      if (reply.voice && caps) {
+        const outcome = checkVoiceReply(reply.text, caps);
+        if (!outcome.voiced) {
+          log("info", "voiced reply will post as text", {
+            room: reply.room,
+            reason: outcome.reason,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: `delivered to hub, but NOT as a voice note — ${outcome.reason}`,
+              },
+            ],
+          };
+        }
+        return { content: [{ type: "text", text: "delivered to hub (as a voice note)" }] };
+      }
       return { content: [{ type: "text", text: "delivered to hub" }] };
     }
     if (req.params.name === "send_file") {

@@ -174,7 +174,10 @@ See [../configuration.md](../configuration.md) for the full surface.
   too long (`HUB_TTS_MAX_CHARS`), all code/links/paths, TTS disabled, or a non-OGG
   response — the hub posts it as text and logs the reason (`voiced reply not speakable`
   / `…TTS is disabled` / `tts synthesis failed` / `…isn't a voice-note format`), so a
-  "missing" voice note is diagnosable.
+  "missing" voice note is diagnosable. The **sending agent** also learns in the moment:
+  the hub advertises its cap at registration and the `reply` tool result reports whether
+  the reply went out as voice or fell back (and why), so length discipline is
+  self-correcting (#74).
 - **Address a voice note** the way you'd address a colleague: **reply** to an agent's
   message, or **open by naming** them — "Platform, redeploy" (unicast), "Platform and
   GitOps, sync up" (multicast), "Everyone, stand down" (broadcast). The hub echoes the

@@ -3,3 +3,4 @@ export * from "./messages.js";
 export * from "./frames.js";
 export * from "./notices.js";
 export * from "./config.js";
+export * from "./tts-text.js";

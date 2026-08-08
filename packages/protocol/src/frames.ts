@@ -72,11 +72,25 @@ export type SessionToHubFrame = z.infer<typeof sessionToHubFrameSchema>;
 
 // ── hub → session ───────────────────────────────────────────────────────────
 
+/** Whether the hub can voice replies, and the cap above which it posts text (#74). */
+export const voiceReplyCapsSchema = z.object({
+  enabled: z.boolean(),
+  maxChars: z.number().int().positive(),
+});
+export type VoiceReplyCapsFrame = z.infer<typeof voiceReplyCapsSchema>;
+
 /** Registration accepted; confirms the negotiated version + effective settings. */
 export const registeredFrameSchema = z.object({
   type: z.literal("registered"),
   agent: z.string().min(1),
   protocolVersion: z.number().int().positive(),
+  /**
+   * Voice-reply capability, so the channel can tell the sending agent — in the
+   * `reply` tool result — when a `voice: true` reply won't be voiced (too long /
+   * unspeakable). Absent from older hubs; the channel then can't predict and
+   * reports voice optimistically.
+   */
+  voiceReply: voiceReplyCapsSchema.optional(),
 });
 export type RegisteredFrame = z.infer<typeof registeredFrameSchema>;
 

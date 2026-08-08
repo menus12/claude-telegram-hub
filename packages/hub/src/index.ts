@@ -15,7 +15,6 @@ export { AgentRegistry } from "./registry.js";
 export { Session } from "./session.js";
 export { SessionServer, type SessionServerOptions } from "./server.js";
 export type { TransportAdapter, Inbox, OutboundVoice } from "./adapter.js";
-export { speakableText } from "./tts-text.js";
 export {
   HttpTranscriptionService,
   type TranscriptionService,
