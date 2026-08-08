@@ -109,7 +109,8 @@ export function parseReplyArgs(args: unknown): ReplyInput {
     room: a.room,
     text: a.text,
     mentions,
-    ...(a.voice ? { voice: true } : {}),
+    // Preserve an explicit `false` — under HUB_TTS_AUTO it opts a reply out of voice.
+    ...(a.voice !== undefined ? { voice: a.voice } : {}),
     ...(a.voiceText ? { voiceText: a.voiceText } : {}),
   };
 }
@@ -230,7 +231,7 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
             voice: {
               type: "boolean",
               description:
-                "Also send this reply as a voice note. Use for a short, spoken-appropriate message — a gist + next action, a couple of sentences — especially when replying to a voice message. Write `text` for the ear: expand abbreviations, keep hex/IPs/code/links/exact-values out. It must stay under the hub's character cap and be speakable; code, links, lists, or long text can't be voiced and post as text. The tool result tells you whether it went out as voice or fell back to text (and why), so you can shorten and re-send if needed.",
+                "Also send this reply as a voice note. Use for a short, spoken-appropriate message — a gist + next action, a couple of sentences — especially when replying to a voice message. Write `text` for the ear: expand abbreviations, keep hex/IPs/code/links/exact-values out. It must stay under the hub's character cap and be speakable; code, links, lists, or long text can't be voiced and post as text. The tool result tells you whether it went out as voice or fell back to text (and why), so you can shorten and re-send if needed. If this hub auto-voices replies, set `voice: false` to force this one to stay text.",
             },
             voiceText: {
               type: "string",

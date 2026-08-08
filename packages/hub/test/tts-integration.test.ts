@@ -7,7 +7,7 @@ import type { SynthesisService } from "../src/index.js";
 import { FakeSynthesisService } from "./fake-synthesizer.js";
 import { waitFor, delay } from "./helpers.js";
 
-function hubConfig() {
+function hubConfig(extra: Record<string, string> = {}) {
   return loadHubConfig({
     HUB_SESSION_SECRET: "s3cr3t",
     HUB_ALLOWLIST: "user1",
@@ -15,6 +15,7 @@ function hubConfig() {
     HUB_BIND_PORT: "0",
     HUB_ADAPTER: "loopback",
     HUB_LOG_LEVEL: "error",
+    ...extra,
   });
 }
 
@@ -44,10 +45,11 @@ type LogCall = { level: string; msg: string };
 async function startHub(
   synth?: SynthesisService,
   logs?: LogCall[],
+  cfgExtra: Record<string, string> = {},
 ): Promise<{ adapter: LoopbackAdapter; url: string }> {
   const adapter = new LoopbackAdapter();
   const logger = logs ? (level: string, msg: string) => logs.push({ level, msg }) : () => {};
-  hub = new Hub({ config: hubConfig(), adapter, logger, ...(synth ? { synth } : {}) });
+  hub = new Hub({ config: hubConfig(cfgExtra), adapter, logger, ...(synth ? { synth } : {}) });
   await hub.start();
   return { adapter, url: `ws://127.0.0.1:${hub.port()}` };
 }
@@ -167,6 +169,43 @@ describe("voiced replies (TTS)", () => {
     a.client.sendReply({ room: "-100", text: "all green", voice: true });
     await waitFor(() => adapter.sent.length >= 1);
     expect(adapter.sentVoices).toHaveLength(0);
+  });
+
+  describe("HUB_TTS_AUTO (#69)", () => {
+    it("auto-voices a short speakable reply without voice:true", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth, undefined, { HUB_TTS_AUTO: "on" });
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      a.client.sendReply({ room: "-100", text: "all green, deployed" }); // no voice flag
+      await waitFor(() => adapter.sentVoices.length >= 1);
+      expect(adapter.sentVoices[0].out.text).toBe("all green, deployed");
+    });
+
+    it("does not auto-voice a code/unspeakable reply", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth, undefined, { HUB_TTS_AUTO: "on" });
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      a.client.sendReply({ room: "-100", text: "```\nnpm ci\n```" });
+      await waitFor(() => adapter.sent.length >= 1);
+      expect(adapter.sentVoices).toHaveLength(0);
+      expect(synth.calls).toHaveLength(0);
+    });
+
+    it("voice:false forces text even under auto", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth, undefined, { HUB_TTS_AUTO: "on" });
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      a.client.sendReply({ room: "-100", text: "all green", voice: false });
+      await waitFor(() => adapter.sent.length >= 1);
+      expect(adapter.sentVoices).toHaveLength(0);
+      expect(synth.calls).toHaveLength(0);
+    });
   });
 
   it("a normal reply (no voice) is still text", async () => {

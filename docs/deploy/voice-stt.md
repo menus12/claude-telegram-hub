@@ -158,6 +158,7 @@ also exposes an OpenAI-compatible **`/openai/v1/…`** surface that accepts
 | `HUB_TTS_VOICE` | — | TTS voice id, language-specific (required with `HUB_TTS_URL`). |
 | `HUB_TTS_FORMAT` | `opus` | Response format; keep `opus` for Telegram voice notes. |
 | `HUB_TTS_MAX_CHARS` | `300` | Skip voicing a reply longer than this (posts text). |
+| `HUB_TTS_AUTO` | `off` | Auto-voice every speakable reply without the agent's `voice: true`; `voice: false` opts a reply out. |
 | `HUB_TTS_API_KEY` | — | Cloud TTS key (`Authorization: Bearer …` by default). |
 | `HUB_TTS_AUTH_HEADER` | `Authorization` | Auth header name; `api-key` for Azure OpenAI. |
 
@@ -165,6 +166,11 @@ See [../configuration.md](../configuration.md) for the full surface.
 
 ## Use & verify
 
+- **Hands-free voicing.** Set `HUB_TTS_AUTO=on` to voice every reply that passes the
+  speakability heuristic *without* the agent setting `voice: true` — handy for a room
+  the operator listens to. The same guards apply (code/links/long → text), and an agent
+  can still force text on a specific reply with `voice: false`. Default off; consider it
+  a per-room preference until per-operator control lands ([#70](https://github.com/menus12/claude-telegram-hub/issues/70)).
 - **How agents should use voice** (reply-in-kind, spoken-friendly rendering, when *not*
   to voice) is a shared-room convention, not a deploy knob — see
   [../coordination.md § Voice](../coordination.md). In short: a voice-in gets a voice-out

@@ -32,6 +32,7 @@ describe("loadHubConfig", () => {
     expect(cfg.ttsUrl).toBeUndefined();
     expect(cfg.ttsFormat).toBe("opus");
     expect(cfg.ttsMaxChars).toBe(300);
+    expect(cfg.ttsAuto).toBe(false);
     expect(cfg.sttApiKey).toBeUndefined();
     expect(cfg.ttsApiKey).toBeUndefined();
     expect(cfg.sttAuthHeader).toBeUndefined();
@@ -123,6 +124,7 @@ describe("loadHubConfig", () => {
     expect(cfg.ttsUrl).toBe("http://tts:8000");
     expect(cfg.ttsModel).toBe("kokoro");
     expect(cfg.ttsVoice).toBe("af_sky");
+    expect(loadHubConfig({ ...minimal, HUB_TTS_AUTO: "on" }).ttsAuto).toBe(true);
     // URL set but model/voice missing → rejected
     expect(() => loadHubConfig({ ...minimal, HUB_TTS_URL: "http://tts:8000" })).toThrow(
       /ttsModel/,

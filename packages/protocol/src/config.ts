@@ -159,6 +159,12 @@ export const hubConfigSchema = z.object({
   ttsAuthHeader: z.string().min(1).optional(),
   /** Skip voicing a reply whose speakable text exceeds this many characters. */
   ttsMaxChars: z.number().int().positive().default(300),
+  /**
+   * Auto-voice eligible replies without the agent setting `voice: true`. When on
+   * (and TTS enabled), any reply that passes the speakability heuristic is voiced;
+   * `voice: false` explicitly opts a reply out. Default off. (#69)
+   */
+  ttsAuto: z.boolean().default(false),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -214,6 +220,7 @@ export const HUB_ENV = {
   ttsVoice: "HUB_TTS_VOICE",
   ttsFormat: "HUB_TTS_FORMAT",
   ttsMaxChars: "HUB_TTS_MAX_CHARS",
+  ttsAuto: "HUB_TTS_AUTO",
   ttsApiKey: "HUB_TTS_API_KEY",
   ttsAuthHeader: "HUB_TTS_AUTH_HEADER",
   tagSigil: "HUB_TAG_SIGIL",
@@ -254,6 +261,7 @@ export function loadHubConfig(env: Env): HubConfig {
       ttsVoice: env[HUB_ENV.ttsVoice],
       ttsFormat: env[HUB_ENV.ttsFormat],
       ttsMaxChars: num(env[HUB_ENV.ttsMaxChars]),
+      ttsAuto: bool(env[HUB_ENV.ttsAuto]),
       ttsApiKey: env[HUB_ENV.ttsApiKey],
       ttsAuthHeader: env[HUB_ENV.ttsAuthHeader],
       tagSigil: env[HUB_ENV.tagSigil],

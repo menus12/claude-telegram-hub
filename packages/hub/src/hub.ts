@@ -69,6 +69,7 @@ export class Hub {
   private readonly voiceEcho: boolean;
   private readonly synth: SynthesisService | undefined;
   private readonly ttsMaxChars: number;
+  private readonly ttsAuto: boolean;
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
@@ -91,6 +92,7 @@ export class Hub {
     this.voiceEcho = deps.config.voiceEcho;
     this.synth = deps.synth;
     this.ttsMaxChars = deps.config.ttsMaxChars;
+    this.ttsAuto = deps.config.ttsAuto;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -362,14 +364,18 @@ export class Hub {
   }
 
   /**
-   * Deliver an agent's reply to the room. If the agent set `voice` and TTS is on,
-   * try to synthesize a **captioned voice note** (the caption = the attributed full
-   * text, the source of truth; the audio = a speakable/sanitized rendering). Falls
-   * back to a plain text reply when voice isn't requested, the text isn't speakable
-   * (code/links/too long), synthesis fails, or the audio isn't a voice-note format.
+   * Deliver an agent's reply to the room. Voice it when the agent set `voice: true`
+   * — or, under `HUB_TTS_AUTO`, whenever the agent didn't explicitly opt out
+   * (`voice: false`) and the reply is speakable (#69). The voice note is captioned
+   * with the attributed full `text` (the source of truth); the audio is a
+   * speakable/sanitized rendering (or `voiceText`). Falls back to a plain text reply
+   * when voice isn't wanted, the text isn't speakable (code/links/too long),
+   * synthesis fails, or the audio isn't a voice-note format.
    */
   private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
-    if (reply.voice && this.synth) {
+    // `voice: true`/`false` is an explicit choice; when unset, auto mode decides.
+    const wantsVoice = reply.voice ?? this.ttsAuto;
+    if (wantsVoice && this.synth) {
       // Speak `voiceText` when the agent gave a distinct spoken form; otherwise a
       // sanitized `text`. Either way `text` stays the caption / source of truth (#68).
       const source = reply.voiceText ?? reply.text;
@@ -385,17 +391,18 @@ export class Hub {
         } catch (err) {
           this.deps.logger("warn", "tts synthesis failed; posting text", { error: String(err) });
         }
-      } else {
-        // The reply was voice-requested but isn't speakable (too long, or all
+      } else if (reply.voice === true) {
+        // Explicitly voice-requested but not speakable (too long, or all
         // code/links/paths). Log why the voice didn't go out — a "missing" voice
-        // note is then diagnosable rather than a silent fallback (#67).
+        // note is then diagnosable rather than a silent fallback (#67). Under auto
+        // mode a non-speakable reply staying text is expected, so we don't log it.
         this.deps.logger("info", "voiced reply not speakable; posting text", {
           agent,
           chars: source.length,
           maxChars: this.ttsMaxChars,
         });
       }
-    } else if (reply.voice && !this.synth) {
+    } else if (reply.voice === true && !this.synth) {
       this.deps.logger("info", "voiced reply requested but TTS is disabled; posting text", { agent });
     }
     await this.deps.adapter.send(target, { agent, text: reply.text, kind: "reply" });

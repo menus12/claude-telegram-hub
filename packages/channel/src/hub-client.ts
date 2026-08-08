@@ -90,7 +90,7 @@ export class HubClient implements HubLike {
       text: reply.text,
       mentions: reply.mentions ?? [],
       ...(reply.replyToId ? { replyToId: reply.replyToId } : {}),
-      ...(reply.voice ? { voice: true } : {}),
+      ...(reply.voice !== undefined ? { voice: reply.voice } : {}),
       ...(reply.voiceText ? { voiceText: reply.voiceText } : {}),
     });
   }
