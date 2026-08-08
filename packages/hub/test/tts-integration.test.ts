@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { HubClient } from "@claude-telegram-hub/channel";
 import { loadHubConfig } from "@claude-telegram-hub/protocol";
-import type { ChannelConfig } from "@claude-telegram-hub/protocol";
+import type { ChannelConfig, InboundMessage } from "@claude-telegram-hub/protocol";
 import { Hub, LoopbackAdapter } from "../src/index.js";
 import type { SynthesisService } from "../src/index.js";
 import { FakeSynthesisService } from "./fake-synthesizer.js";
@@ -247,6 +247,43 @@ describe("voiced replies (TTS)", () => {
       a.client.sendReply({ room: "-100", text: "готово", voice: true });
       await waitFor(() => adapter.sentVoices.length >= 1);
       expect(synth.voices[0]).toBeUndefined(); // synth falls back to its own default
+    });
+  });
+
+  describe("per-room /voice on|off (#70)", () => {
+    const command = (text: string): InboundMessage => ({
+      adapter: "loopback",
+      room: "-100",
+      fromKind: "human",
+      fromId: "user1", // allowlisted in hubConfig
+      text,
+      mentions: [],
+    });
+
+    it("suppresses voiced replies after /voice off and restores on /voice on", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth);
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      // baseline: a voice:true reply is voiced
+      a.client.sendReply({ room: "-100", text: "one", voice: true });
+      await waitFor(() => adapter.sentVoices.length >= 1);
+
+      // operator turns voice off for this room
+      await adapter.deliver(command("/voice off"));
+      await waitFor(() => adapter.sent.some((s) => s.out.text.includes("Voice replies off")));
+
+      // now a voice:true reply arrives as text, not voice
+      a.client.sendReply({ room: "-100", text: "two", voice: true });
+      await waitFor(() => adapter.sent.some((s) => s.out.text === "two"));
+      expect(adapter.sentVoices).toHaveLength(1); // still just the baseline
+
+      // turn it back on → voiced again
+      await adapter.deliver(command("/voice on"));
+      await waitFor(() => adapter.sent.some((s) => s.out.text.includes("Voice replies on")));
+      a.client.sendReply({ room: "-100", text: "three", voice: true });
+      await waitFor(() => adapter.sentVoices.length >= 2);
     });
   });
 

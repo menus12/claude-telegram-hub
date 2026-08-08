@@ -2,8 +2,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Logger } from "./logger.js";
 
-/** The in-chat allowlist commands the hub understands. */
-export const KNOWN_COMMANDS = new Set(["start", "allow", "deny", "allowlist", "pending"]);
+/** The in-chat commands the hub understands. */
+export const KNOWN_COMMANDS = new Set([
+  "start",
+  "allow",
+  "deny",
+  "allowlist",
+  "pending",
+  "voice",
+]);
 
 export interface ParsedCommand {
   name: string;
@@ -27,6 +34,8 @@ interface PersistShape {
   allow: string[];
   denied: string[];
   pending: string[];
+  /** Rooms where an operator turned voiced replies off (`/voice off`); default on. */
+  voiceOff: string[];
 }
 
 export interface AccessControllerOptions {
@@ -53,6 +62,8 @@ export class AccessController {
   private readonly allow = new Set<string>();
   private readonly denied = new Set<string>();
   private readonly pending = new Set<string>();
+  /** Rooms with voiced replies turned off at runtime (`/voice off`). Default: on. */
+  private readonly voiceOff = new Set<string>();
   private readonly stateFile: string | undefined;
   private readonly logger: Logger | undefined;
 
@@ -107,6 +118,18 @@ export class AccessController {
       .sort();
   }
 
+  /** Turn voiced replies on/off for a room (#70). Persisted. */
+  setRoomVoice(room: string, on: boolean): void {
+    if (on) this.voiceOff.delete(room);
+    else this.voiceOff.add(room);
+    this.persist();
+  }
+
+  /** Whether a room has voiced replies turned off (default: on). */
+  isRoomVoiceOff(room: string): boolean {
+    return this.voiceOff.has(room);
+  }
+
   listPending(): string[] {
     return [...this.pending].sort();
   }
@@ -118,6 +141,7 @@ export class AccessController {
       for (const id of raw.allow ?? []) this.allow.add(id);
       for (const id of raw.denied ?? []) this.denied.add(id);
       for (const id of raw.pending ?? []) this.pending.add(id);
+      for (const room of raw.voiceOff ?? []) this.voiceOff.add(room);
     } catch (err) {
       this.logger?.("warn", "failed to load access state", { error: String(err) });
     }
@@ -129,6 +153,7 @@ export class AccessController {
       allow: [...this.allow],
       denied: [...this.denied],
       pending: [...this.pending],
+      voiceOff: [...this.voiceOff],
     };
     mkdirSync(dirname(this.stateFile), { recursive: true });
     writeFileSync(this.stateFile, JSON.stringify(data, null, 2));

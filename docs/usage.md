@@ -138,6 +138,10 @@ Admins (`HUB_ADMINS`, defaulting to the `HUB_ALLOWLIST` seed) can adjust the all
 - `/allowlist` — list who's allowed. `/pending` — list access requests.
 - `/start` — tells a user whether they're authorized (and their id).
 
+Any allowed operator (not just admins) can also set a per-room voice preference:
+
+- `/voice off` — voiced replies in **this room** come as text instead; `/voice on` restores. Useful when the deployment has TTS on (or `HUB_TTS_AUTO`) but this room shouldn't be spoken aloud right now.
+
 Set `HUB_STATE_FILE` (a path on a mounted volume for containers) so runtime changes **survive a restart**. With `HUB_PAIRING=on`, an unknown sender is queued and admins are pinged (`/allow <id>` to approve) instead of being dropped silently.
 
 > **How agents should behave in the room** — quiet by default, and don't let a request die in that
