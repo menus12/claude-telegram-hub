@@ -1,32 +1,49 @@
-# Voice (speech-to-text) overlay — opt-in. Adds a self-hosted, OpenAI-compatible
-# Whisper service and points the hub at it, so operators can send voice notes.
-# Run alongside the base compose file:
+# Voice overlay — opt-in. Adds self-hosted, OpenAI-compatible speech services and
+# points the hub at them, so operators can send voice notes (STT) and agents can
+# reply with voice (TTS). Run alongside the base compose file:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.voice.yml up -d
 #
 # See docs/deploy/voice-stt.md. Audio stays on the compose network (no published
-# port on the STT service) — only the hub reaches it.
+# ports on the speech services) — only the hub reaches them. Drop either service +
+# its HUB_STT_URL / HUB_TTS_URL to run only one direction.
 services:
   hub:
     environment:
+      # Inbound: transcription.
       HUB_STT_URL: http://stt:8000
       # Model id as your STT server expects it. faster-whisper servers (speaches)
       # take a HuggingFace id; adjust to `...-medium` for better Russian accuracy.
       HUB_STT_MODEL: Systran/faster-whisper-small
       # HUB_STT_LANG: auto   # or ru / en
+      # Outbound: agents reply with voice. The service MUST return OGG/Opus
+      # (response_format=opus) for a Telegram voice note, else the hub posts text.
+      HUB_TTS_URL: http://tts:8880
+      HUB_TTS_MODEL: kokoro
+      HUB_TTS_VOICE: af_sky # pick a voice matching your language (Piper has RU voices)
+      HUB_TTS_FORMAT: opus
     depends_on:
       - stt
+      - tts
 
   stt:
-    # Any OpenAI-compatible transcription server works (exposes
-    # POST /v1/audio/transcriptions). This is faster-whisper on CPU — confirm the
-    # current image tag / port / model-id format against the server's own docs.
+    # Any OpenAI-compatible transcription server works (POST /v1/audio/transcriptions).
+    # This is faster-whisper on CPU — confirm the image tag / port / model-id format
+    # against the server's own docs.
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     restart: unless-stopped
     environment:
       HF_HOME: /data/hf # cache downloaded models on the volume (first request is slow)
     volumes:
       - stt-models:/data/hf
+
+  tts:
+    # Any OpenAI-compatible speech server that can return opus works
+    # (POST /v1/audio/speech). This is Kokoro on CPU; Piper is a lighter alternative
+    # with explicit RU voices. Confirm the image tag / port / model & voice ids and
+    # opus support against the server's own docs.
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    restart: unless-stopped
 
 volumes:
   stt-models:

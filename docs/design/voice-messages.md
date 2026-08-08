@@ -5,8 +5,11 @@ Status: **Phase 1 (inbound voice → text) implemented** — broadcast/recipient
 ([#54](https://github.com/menus12/claude-telegram-hub/pull/54)), voice addressing + transcript echo
 ([#55](https://github.com/menus12/claude-telegram-hub/pull/55)), Telegram `voice` handling
 ([#56](https://github.com/menus12/claude-telegram-hub/pull/56)), and the STT sidecar deploy
-([deploy/voice-stt.md](../deploy/voice-stt.md)). **Phase 1 ships in v0.5.0.** Phase 2 (opt-in
-outbound TTS) is future. This is the deliverable
+([deploy/voice-stt.md](../deploy/voice-stt.md)). **Phase 1 ships in v0.5.0.** **Phase 2 (opt-in
+outbound TTS — agents reply with voice) is also implemented** ([#60](https://github.com/menus12/claude-telegram-hub/issues/60)):
+`reply(voice: true)` → a captioned voice note via a pluggable `SynthesisService` (`HUB_TTS_URL`,
+OpenAI-compatible `/v1/audio/speech`, opus), text always authoritative, hub skips code/links/long
+text. This is the deliverable
 for [#37](https://github.com/menus12/claude-telegram-hub/issues/37): a concrete, privacy-compatible
 STT (and optional TTS) recommendation, where it runs, format handling, cost/latency, and a phased
 plan — with voice framed as a **modality inside our existing shared-room, co-worker conventions**,

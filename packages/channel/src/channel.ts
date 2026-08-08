@@ -29,6 +29,9 @@ const INSTRUCTIONS = [
   "An inbound file is saved locally and its path given in the `attachment_path` attribute —",
   "open it with your normal file tools. To send a file out, call `send_file` with the `room`",
   "and a local `path` (plus an optional `caption`).",
+  "For a short, spoken-appropriate reply (a brief ack or answer) — especially when the message",
+  "you're answering has `voice=\"true\"` — set `voice: true` on `reply` to also send it as a voice",
+  "note. Don't voice code, links, lists, paths, or long text; those stay text-only.",
 ].join(" ");
 
 /**
@@ -53,6 +56,7 @@ export function buildInboundNotification(
   };
   if (m.mentions.length > 0) meta.mentions = m.mentions.join(",");
   if (frame.coordinationThread) meta.thread = frame.coordinationThread;
+  if (m.voice) meta.voice = "true"; // this arrived as a voice note (you may reply in kind)
   if (frame.file) {
     // Always surface an attached file inline (so the agent reliably notices it) and
     // in meta (for tooling) — with its saved path when we could write it locally, or

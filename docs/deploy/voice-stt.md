@@ -1,12 +1,18 @@
-# Deploy voice (speech-to-text)
+# Deploy voice (speech-to-text and text-to-speech)
 
-Voice messages are **opt-in**: the hub transcribes a Telegram voice note by POSTing
-its audio to an **OpenAI-compatible transcription service** (`POST
-<url>/v1/audio/transcriptions`) at `HUB_STT_URL`, then routes the transcript like a
-typed message (design & rationale: [../design/voice-messages.md](../design/voice-messages.md)).
-Any server that speaks that protocol works — self-hosted Whisper for an on-prem
-privacy posture, or a cloud API — so this is a **config swap, not a code change**.
-Unset `HUB_STT_URL` → voice is cleanly disabled.
+Voice is **opt-in** in **two directions**, each behind an **OpenAI-compatible**
+speech service (design & rationale: [../design/voice-messages.md](../design/voice-messages.md)):
+
+- **Inbound (STT)** — the hub transcribes a Telegram voice note by POSTing its audio
+  to `HUB_STT_URL` (`POST <url>/v1/audio/transcriptions`), then routes the transcript
+  like a typed message. Unset `HUB_STT_URL` → disabled.
+- **Outbound (TTS)** — an agent that sets `voice: true` on a short `reply` gets it
+  rendered as a voice note; the hub POSTs the text to `HUB_TTS_URL`
+  (`POST <url>/v1/audio/speech`, `response_format: opus`) and sends the OGG/Opus back
+  as a captioned voice note. Unset `HUB_TTS_URL` → agents can't reply with voice.
+
+Both are a **config swap, not a code change** — self-hosted for on-prem privacy, or a
+cloud API. You can run either direction alone.
 
 > **Privacy, stated honestly.** A voice note already transits Telegram's servers
 > before the hub receives it. Self-hosting STT means the audio isn't handed to a
@@ -59,14 +65,38 @@ they share a private network and the audio never leaves it:
 - CPU sizing is fine for short voice notes; give the sidecar ~1–2 vCPU / 2–4 GB for
   a `small`/`medium` model.
 
+## Text-to-speech (outbound — agents reply with voice)
+
+Symmetric to STT: point `HUB_TTS_URL` at an OpenAI-compatible **speech** server
+(`POST /v1/audio/speech`) and set `HUB_TTS_MODEL` + `HUB_TTS_VOICE`. The compose
+overlay adds a `tts` service alongside `stt`; the same sidecar pattern applies on
+Azure. Notes:
+
+- **Engine:** **Piper** (MIT, CPU-light, explicit **RU + EN** voices) is the
+  pragmatic default for a bilingual room; **Kokoro** (Apache-2.0) for higher EN
+  quality. Avoid Coqui/XTTS (commercial-use license).
+- **Must return OGG/Opus.** The hub requests `response_format: opus` and only sends a
+  Telegram **voice note** for `audio/ogg`; if your server returns mp3/wav instead, the
+  hub falls back to posting the reply as **text** — so confirm your server supports
+  opus.
+- **Voice is language-specific** (unlike STT's auto-detect): `HUB_TTS_VOICE` picks the
+  voice, so choose one matching the language your agents reply in.
+- Some servers (e.g. speaches) expose **both** endpoints, so you can point
+  `HUB_STT_URL` and `HUB_TTS_URL` at one instance.
+
 ## Configuration
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `HUB_STT_URL` | — | STT service base URL. Unset = voice disabled. |
-| `HUB_STT_MODEL` | `small` | Model id (server-specific format). |
+| `HUB_STT_URL` | — | STT service base URL. Unset = inbound voice disabled. |
+| `HUB_STT_MODEL` | `small` | STT model id (server-specific format). |
 | `HUB_STT_LANG` | `auto` | `auto` (detect) or `ru` / `en`. |
 | `HUB_VOICE_ECHO` | `true` | Echo `🎙️ heard → @…: "transcript"` into the room. |
+| `HUB_TTS_URL` | — | TTS service base URL. Unset = agents can't reply with voice. |
+| `HUB_TTS_MODEL` | — | TTS model id (required with `HUB_TTS_URL`). |
+| `HUB_TTS_VOICE` | — | TTS voice id, language-specific (required with `HUB_TTS_URL`). |
+| `HUB_TTS_FORMAT` | `opus` | Response format; keep `opus` for Telegram voice notes. |
+| `HUB_TTS_MAX_CHARS` | `300` | Skip voicing a reply longer than this (posts text). |
 
 See [../configuration.md](../configuration.md) for the full surface.
 

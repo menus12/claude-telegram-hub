@@ -83,6 +83,23 @@ describe("buildInboundNotification", () => {
     expect(note.params.meta.thread).toBe("t1");
   });
 
+  it("flags a voice-origin message in meta (so the agent can reply in kind)", () => {
+    const frame: InboundFrame = {
+      type: "inbound",
+      message: {
+        adapter: "telegram",
+        room: "-100",
+        fromKind: "human",
+        fromId: "42",
+        text: "platform, redeploy",
+        mentions: ["platform"],
+        voice: true,
+      },
+    };
+    expect(buildInboundNotification(frame).params.meta.voice).toBe("true");
+    expect(buildInboundNotification(humanFrame("typed")).params.meta.voice).toBeUndefined();
+  });
+
   it("emits only identifier-safe meta keys", () => {
     const meta = buildInboundNotification(
       humanFrame("x", ["a", "b"]),
