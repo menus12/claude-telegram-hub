@@ -243,6 +243,25 @@ export class Hub {
       return;
     }
 
+    // `/voice on|off` is a per-room preference any allowed operator may set — not an
+    // admin action. (Commands bypass the access check, so gate it here.) (#70)
+    if (cmd.name === "voice") {
+      if (!this.access.isAllowed(fromId)) return void this.handleUnauthorized(message, false);
+      const arg = cmd.args[0]?.toLowerCase();
+      if (arg !== "on" && arg !== "off") {
+        return void this.replyNotice(room, "Usage: /voice on|off");
+      }
+      this.access.setRoomVoice(room, arg === "on");
+      this.deps.logger("info", "room voice preference set", { room, on: arg === "on" });
+      this.replyNotice(
+        room,
+        arg === "on"
+          ? "🔊 Voice replies on for this room."
+          : "🔇 Voice replies off for this room — replies will come as text.",
+      );
+      return;
+    }
+
     // All remaining commands are admin-only; non-admins are ignored.
     if (!this.access.isAdmin(fromId)) {
       this.deps.logger("info", "ignoring admin command from non-admin", { fromId, cmd: cmd.name });
@@ -379,7 +398,8 @@ export class Hub {
    */
   private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
     // `voice: true`/`false` is an explicit choice; when unset, auto mode decides.
-    const wantsVoice = reply.voice ?? this.ttsAuto;
+    // A room where an operator ran `/voice off` gets text regardless (#70).
+    const wantsVoice = (reply.voice ?? this.ttsAuto) && !this.access.isRoomVoiceOff(reply.room);
     if (wantsVoice && this.synth) {
       // Speak `voiceText` when the agent gave a distinct spoken form; otherwise a
       // sanitized `text`. Either way `text` stays the caption / source of truth (#68).

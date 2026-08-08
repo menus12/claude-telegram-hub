@@ -105,4 +105,29 @@ describe("AccessController", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("tracks per-room voice off/on, default on (#70)", () => {
+    const a = make();
+    expect(a.isRoomVoiceOff("-100")).toBe(false); // default on
+    a.setRoomVoice("-100", false);
+    expect(a.isRoomVoiceOff("-100")).toBe(true);
+    expect(a.isRoomVoiceOff("-200")).toBe(false); // other rooms unaffected
+    a.setRoomVoice("-100", true);
+    expect(a.isRoomVoiceOff("-100")).toBe(false);
+  });
+
+  it("persists a room's voice-off preference across a restart (#70)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cth-access-"));
+    try {
+      const file = join(dir, "state.json");
+      const a = make({ stateFile: file });
+      a.setRoomVoice("-100", false);
+      expect(JSON.parse(readFileSync(file, "utf8")).voiceOff).toContain("-100");
+
+      const b = new AccessController({ seed: ["1"], admins: ["1"], stateFile: file });
+      expect(b.isRoomVoiceOff("-100")).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
