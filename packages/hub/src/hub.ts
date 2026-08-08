@@ -27,6 +27,8 @@ import { PresenceTracker } from "./presence.js";
 import { ResponseSla, type PendingAsk } from "./response-sla.js";
 import type { Scheduler } from "./scheduler.js";
 import { SessionServer } from "./server.js";
+import type { SynthesisService } from "./synthesis.js";
+import { speakableText } from "./tts-text.js";
 import type { Logger } from "./logger.js";
 
 export interface HubDeps {
@@ -35,6 +37,8 @@ export interface HubDeps {
   logger: Logger;
   /** Injectable timer for time-based backstops (presence, SLA); tests supply a fake. */
   scheduler?: Scheduler;
+  /** Text-to-speech for voiced replies; absent → agents can't reply with voice. */
+  synth?: SynthesisService;
 }
 
 /** Trim an asking message to a short quotable snippet for reminders/escalations. */
@@ -64,6 +68,8 @@ export class Hub {
   private readonly broadcast: boolean;
   private readonly voiceEnabled: boolean;
   private readonly voiceEcho: boolean;
+  private readonly synth: SynthesisService | undefined;
+  private readonly ttsMaxChars: number;
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
@@ -84,6 +90,8 @@ export class Hub {
     this.broadcast = deps.config.broadcast;
     this.voiceEnabled = deps.config.sttUrl !== undefined;
     this.voiceEcho = deps.config.voiceEcho;
+    this.synth = deps.synth;
+    this.ttsMaxChars = deps.config.ttsMaxChars;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -351,6 +359,32 @@ export class Hub {
     await this.routeToMentioned(message, file);
   }
 
+  /**
+   * Deliver an agent's reply to the room. If the agent set `voice` and TTS is on,
+   * try to synthesize a **captioned voice note** (the caption = the attributed full
+   * text, the source of truth; the audio = a speakable/sanitized rendering). Falls
+   * back to a plain text reply when voice isn't requested, the text isn't speakable
+   * (code/links/too long), synthesis fails, or the audio isn't a voice-note format.
+   */
+  private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
+    if (reply.voice && this.synth) {
+      const spoken = speakableText(reply.text, this.ttsMaxChars);
+      if (spoken) {
+        try {
+          const { audio, mimeType } = await this.synth.synthesize(spoken);
+          if (mimeType === "audio/ogg") {
+            await this.deps.adapter.sendVoice(target, { agent, audio, mimeType, text: reply.text });
+            return;
+          }
+          this.deps.logger("warn", "tts audio isn't a voice-note format; posting text", { mimeType });
+        } catch (err) {
+          this.deps.logger("warn", "tts synthesis failed; posting text", { error: String(err) });
+        }
+      }
+    }
+    await this.deps.adapter.send(target, { agent, text: reply.text, kind: "reply" });
+  }
+
   /** Whether the mention set carries an enabled broadcast token (`@all`, …). */
   private hasBroadcast(mentions: string[]): boolean {
     return this.broadcast && mentions.some(isBroadcastMention);
@@ -418,14 +452,14 @@ export class Hub {
     // on it in this room (an ETA ack and a full answer both count as "spoke").
     this.sla?.onAgentSpoke(reply.room, agent);
 
-    // 1) Post a human-visible copy to the room, attributed to the speaker.
-    const out: OutboundMessage = { agent, text: reply.text, kind: "reply" };
+    // 1) Post the human-visible copy — a captioned voice note if the agent asked
+    // (and it's speakable), otherwise text.
     const target: RouteTarget = {
       adapter: this.deps.adapter.name,
       room: reply.room,
       ...(reply.replyToId ? { replyToId: reply.replyToId } : {}),
     };
-    void this.deps.adapter.send(target, out).catch((err: unknown) => {
+    void this.postAgentReply(agent, reply, target).catch((err: unknown) => {
       this.deps.logger("warn", "adapter send failed", { error: String(err) });
     });
 

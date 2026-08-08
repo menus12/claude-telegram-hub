@@ -16,7 +16,7 @@ export interface SentText {
 
 export interface SentFile {
   chatId: string;
-  kind: "photo" | "document";
+  kind: "photo" | "document" | "voice";
   filename: string;
   bytes: Buffer;
   opts?: SendFileOptions;
@@ -81,6 +81,16 @@ export class FakeTelegramApi implements TelegramApi {
   ): Promise<number | undefined> {
     const messageId = this.nextMessageId++;
     this.sentFiles.push({ chatId, kind: "photo", filename: file.filename, bytes: file.bytes, opts, messageId });
+    return Promise.resolve(messageId);
+  }
+
+  sendVoice(
+    chatId: string,
+    file: OutgoingFile,
+    opts?: SendFileOptions,
+  ): Promise<number | undefined> {
+    const messageId = this.nextMessageId++;
+    this.sentFiles.push({ chatId, kind: "voice", filename: file.filename, bytes: file.bytes, opts, messageId });
     return Promise.resolve(messageId);
   }
 

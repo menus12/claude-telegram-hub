@@ -216,6 +216,42 @@ describe("TelegramAdapter", () => {
     expect(received[0].mentions).toEqual([]);
   });
 
+  it("sends a voiced reply as a Telegram voice note with an attributed caption", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.sendVoice(
+      { adapter: "telegram", room: "-100" },
+      { agent: "platform", audio: Buffer.from("OGG"), mimeType: "audio/ogg", text: "all green" },
+    );
+    expect(api.sentFiles[0]).toMatchObject({ kind: "voice", chatId: "-100", filename: "reply.ogg" });
+    expect(api.sentFiles[0].opts?.caption).toBe("platform ▸ all green");
+    expect(api.sentFiles[0].bytes.toString()).toBe("OGG");
+  });
+
+  it("indexes a voiced reply so a reply to it routes back to the agent", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    const received: InboundMessage[] = [];
+    await adapter.start((m) => {
+      received.push(m);
+      return Promise.resolve();
+    });
+    await adapter.sendVoice(
+      { adapter: "telegram", room: "-100" },
+      { agent: "platform", audio: Buffer.from("OGG"), mimeType: "audio/ogg", text: "all green" },
+    );
+    const voiceId = api.sentFiles[0].messageId;
+    api.push({
+      message_id: 50,
+      chat: { id: -100, type: "supergroup" },
+      from: { id: 42, is_bot: false },
+      text: "and staging?",
+      reply_to_message: { message_id: voiceId },
+    });
+    await delay(0);
+    expect(received[0].mentions).toEqual(["platform"]);
+  });
+
   it("stops the underlying api", async () => {
     const api = new FakeTelegramApi();
     const adapter = new TelegramAdapter({ api, tagSigil: "@" });

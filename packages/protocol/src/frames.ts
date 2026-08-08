@@ -33,6 +33,13 @@ export const replyFrameSchema = z.object({
   /** Agent names tagged in the reply; drives agent→agent re-injection. */
   mentions: z.array(z.string().min(1)).default([]),
   replyToId: z.string().optional(),
+  /**
+   * Request that this (short) reply is also rendered as a voice note. Honored only
+   * when TTS is enabled and the text is speakable (the hub skips code/links/long
+   * text); the text is always the source of truth. Human-facing only — agent→agent
+   * re-injection stays text.
+   */
+  voice: z.boolean().optional(),
 });
 export type ReplyFrame = z.infer<typeof replyFrameSchema>;
 

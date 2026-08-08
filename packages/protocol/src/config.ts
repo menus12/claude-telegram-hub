@@ -149,6 +149,8 @@ export const hubConfigSchema = z.object({
   ttsVoice: z.string().min(1).optional(),
   /** TTS response format; `opus` → OGG/Opus (a Telegram voice note). */
   ttsFormat: z.string().min(1).default("opus"),
+  /** Skip voicing a reply whose speakable text exceeds this many characters. */
+  ttsMaxChars: z.number().int().positive().default(300),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -201,6 +203,7 @@ export const HUB_ENV = {
   ttsModel: "HUB_TTS_MODEL",
   ttsVoice: "HUB_TTS_VOICE",
   ttsFormat: "HUB_TTS_FORMAT",
+  ttsMaxChars: "HUB_TTS_MAX_CHARS",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -236,6 +239,7 @@ export function loadHubConfig(env: Env): HubConfig {
       ttsModel: env[HUB_ENV.ttsModel],
       ttsVoice: env[HUB_ENV.ttsVoice],
       ttsFormat: env[HUB_ENV.ttsFormat],
+      ttsMaxChars: num(env[HUB_ENV.ttsMaxChars]),
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),

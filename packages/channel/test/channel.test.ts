@@ -155,6 +155,12 @@ describe("parseReplyArgs", () => {
       /mentions/,
     );
   });
+
+  it("passes through a boolean voice flag and rejects a non-boolean", () => {
+    expect(parseReplyArgs({ room: "r", text: "t", voice: true }).voice).toBe(true);
+    expect(parseReplyArgs({ room: "r", text: "t" }).voice).toBeUndefined();
+    expect(() => parseReplyArgs({ room: "r", text: "t", voice: "yes" })).toThrow(/voice/);
+  });
 });
 
 describe("MCP wiring (in-memory)", () => {

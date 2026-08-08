@@ -14,6 +14,17 @@ import type {
 export type Inbox = (message: InboundMessage, file?: FilePayload) => Promise<void>;
 
 /**
+ * A voiced reply: synthesized audio plus the speaking agent and the full reply
+ * `text` (which becomes the voice note's attributed caption — the source of truth).
+ */
+export interface OutboundVoice {
+  agent: string;
+  audio: Buffer;
+  mimeType: string;
+  text: string;
+}
+
+/**
  * The pluggable transport seam. The hub core is adapter-agnostic: it never
  * imports anything platform-specific. Each transport (telegram, later teams /
  * slack) implements this one interface.
@@ -27,6 +38,8 @@ export interface TransportAdapter {
   send(target: RouteTarget, out: OutboundMessage): Promise<void>;
   /** Deliver a file (with optional caption) to a platform target. */
   sendFile(target: RouteTarget, out: OutboundFile): Promise<void>;
+  /** Deliver a voiced reply (a captioned voice note) to a platform target. */
+  sendVoice(target: RouteTarget, out: OutboundVoice): Promise<void>;
   /** Stop producing messages and release resources. */
   stop(): Promise<void>;
 }

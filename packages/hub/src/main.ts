@@ -6,6 +6,7 @@ import { LoopbackAdapter } from "./adapters/loopback.js";
 import { GrammyApi } from "./adapters/telegram/grammy-api.js";
 import { TelegramAdapter } from "./adapters/telegram/adapter.js";
 import { HttpTranscriptionService } from "./transcription.js";
+import { HttpSynthesisService } from "./synthesis.js";
 import { makeLogger, type Logger } from "./logger.js";
 import type { TransportAdapter } from "./adapter.js";
 
@@ -45,7 +46,19 @@ async function main(): Promise<void> {
   const cfg = loadHubConfig(process.env);
   const log = makeLogger(cfg.logLevel);
   const adapter = buildAdapter(cfg, process.env, log);
-  const hub = new Hub({ config: cfg, adapter, logger: log });
+  // Text-to-speech (voiced replies) is enabled by pointing HUB_TTS_URL at a service;
+  // config validation guarantees model + voice are present when the URL is set.
+  const synth =
+    cfg.ttsUrl && cfg.ttsModel && cfg.ttsVoice
+      ? new HttpSynthesisService({
+          url: cfg.ttsUrl,
+          model: cfg.ttsModel,
+          voice: cfg.ttsVoice,
+          format: cfg.ttsFormat,
+          logger: log,
+        })
+      : undefined;
+  const hub = new Hub({ config: cfg, adapter, logger: log, ...(synth ? { synth } : {}) });
 
   const shutdown = (): void => {
     void hub.stop().finally(() => process.exit(0));
