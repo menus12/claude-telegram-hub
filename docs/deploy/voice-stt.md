@@ -97,10 +97,11 @@ Azure. Notes:
   Telegram **voice note** for `audio/ogg`; if your server returns mp3/wav instead, the
   hub falls back to posting the reply as **text** — so confirm your server supports
   opus.
-- **Voice is language-specific** (unlike STT's auto-detect): `HUB_TTS_VOICE` picks a
-  single voice, so choose one matching the language your agents reply in. A bilingual
-  room speaks the other language with the wrong phonetics today — per-language voice
-  selection is tracked in [#71](https://github.com/menus12/claude-telegram-hub/issues/71).
+- **Voice is language-specific** (unlike STT's auto-detect): `HUB_TTS_VOICE` picks the
+  default voice. For a **bilingual room**, set `HUB_TTS_VOICE_MAP=en:<en-voice>,ru:<ru-voice>`
+  — the hub detects each reply's language (Cyrillic vs Latin script) and picks the
+  matching voice, falling back to `HUB_TTS_VOICE` for any unmapped language, so RU and EN
+  replies are each spoken with the right phonetics in the same room (#71).
 - Some servers (e.g. speaches) expose **both** endpoints, so you can point
   `HUB_STT_URL` and `HUB_TTS_URL` at one instance.
 
@@ -155,7 +156,8 @@ also exposes an OpenAI-compatible **`/openai/v1/…`** surface that accepts
 | `HUB_VOICE_ECHO` | `true` | Echo `🎙️ heard → @…: "transcript"` into the room. |
 | `HUB_TTS_URL` | — | TTS base URL (or full endpoint). Unset = agents can't reply with voice. |
 | `HUB_TTS_MODEL` | — | TTS model id (required with `HUB_TTS_URL`). |
-| `HUB_TTS_VOICE` | — | TTS voice id, language-specific (required with `HUB_TTS_URL`). |
+| `HUB_TTS_VOICE` | — | Default TTS voice id (required with `HUB_TTS_URL`); fallback for unmapped languages. |
+| `HUB_TTS_VOICE_MAP` | — | Per-language voices for a bilingual room, `lang:voice,…` (e.g. `en:af_sky,ru:af_ru`). |
 | `HUB_TTS_FORMAT` | `opus` | Response format; keep `opus` for Telegram voice notes. |
 | `HUB_TTS_MAX_CHARS` | `300` | Skip voicing a reply longer than this (posts text). |
 | `HUB_TTS_AUTO` | `off` | Auto-voice every speakable reply without the agent's `voice: true`; `voice: false` opts a reply out. |

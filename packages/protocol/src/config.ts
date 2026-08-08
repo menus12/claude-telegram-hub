@@ -25,6 +25,24 @@ function csv(v: string | undefined): string[] | undefined {
 }
 
 /**
+ * Parse a `key:value,key:value` env value into a record (e.g. a per-language voice
+ * map `en:af_sky,ru:af_ru`). Keys are lowercased/trimmed; blank/absent → undefined;
+ * an entry without a `:` or with an empty side is dropped.
+ */
+function kvmap(v: string | undefined): Record<string, string> | undefined {
+  if (v === undefined) return undefined;
+  const out: Record<string, string> = {};
+  for (const pair of v.split(",")) {
+    const i = pair.indexOf(":");
+    if (i < 0) continue;
+    const key = pair.slice(0, i).trim().toLowerCase();
+    const val = pair.slice(i + 1).trim();
+    if (key && val) out[key] = val;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Coerce a numeric env value. Returns `undefined` for absent/blank (so schema
  * defaults apply) and passes the raw string through on a non-numeric value (so
  * the schema reports a clear "expected number, received string" error).
@@ -149,8 +167,15 @@ export const hubConfigSchema = z.object({
   ttsUrl: z.string().url().optional(),
   /** TTS model id (server-specific). Required when `ttsUrl` is set. */
   ttsModel: z.string().min(1).optional(),
-  /** TTS voice id (language-specific). Required when `ttsUrl` is set. */
+  /** TTS voice id (language-specific). Required when `ttsUrl` is set. Also the
+   * fallback when a reply's language isn't in `ttsVoiceMap`. */
   ttsVoice: z.string().min(1).optional(),
+  /**
+   * Per-language voice overrides for a bilingual room, `lang:voice` pairs (e.g.
+   * `en:af_sky,ru:af_ru`). The hub detects a reply's language (script heuristic)
+   * and picks the matching voice, falling back to `ttsVoice`. (#71)
+   */
+  ttsVoiceMap: z.record(z.string().min(1)).optional(),
   /** TTS response format; `opus` → OGG/Opus (a Telegram voice note). */
   ttsFormat: z.string().min(1).default("opus"),
   /** API key for a cloud TTS service (sent as `Authorization: Bearer …` by default). */
@@ -221,6 +246,7 @@ export const HUB_ENV = {
   ttsFormat: "HUB_TTS_FORMAT",
   ttsMaxChars: "HUB_TTS_MAX_CHARS",
   ttsAuto: "HUB_TTS_AUTO",
+  ttsVoiceMap: "HUB_TTS_VOICE_MAP",
   ttsApiKey: "HUB_TTS_API_KEY",
   ttsAuthHeader: "HUB_TTS_AUTH_HEADER",
   tagSigil: "HUB_TAG_SIGIL",
@@ -259,6 +285,7 @@ export function loadHubConfig(env: Env): HubConfig {
       ttsUrl: env[HUB_ENV.ttsUrl],
       ttsModel: env[HUB_ENV.ttsModel],
       ttsVoice: env[HUB_ENV.ttsVoice],
+      ttsVoiceMap: kvmap(env[HUB_ENV.ttsVoiceMap]),
       ttsFormat: env[HUB_ENV.ttsFormat],
       ttsMaxChars: num(env[HUB_ENV.ttsMaxChars]),
       ttsAuto: bool(env[HUB_ENV.ttsAuto]),
