@@ -146,10 +146,14 @@ transcript's `voice` marker:
 
 - **Addressing without `@tags`.** Speech carries no sigils, so the hub resolves recipients from the
   co-worker gestures people actually use: **reply-to** wins (you replied to that agent), otherwise the
-  transcript's **leading segment** — consecutive agent-name matches (generous/fuzzy, so a natural
-  "infra" hits `re-infra`) and a broadcast keyword ("everyone"). Only the opening is an address, so
-  "Platform, ask gitops about X" is unicast to platform. The result is the same recipient **set** the
-  rest of routing uses, so unicast/multicast/broadcast fall out of its cardinality.
+  transcript's **leading segment** — consecutive agent-name matches and a broadcast keyword
+  ("everyone"). Only the opening is an address, so "Platform, ask gitops about X" is unicast to
+  platform. The result is the same recipient **set** the rest of routing uses, so
+  unicast/multicast/broadcast fall out of its cardinality. Short repo names transcribe badly, so the
+  hub helps two ways: it **primes the STT model** with the live agent names (as a prompt) so they're
+  transcribed correctly, and matches **tolerantly** — exact at any length (`kb`), substring
+  (`infra`→`re-infra`), and one edit incl. a transposition (`platfrom`→`platform`). The transcript
+  echo shows the resolved recipients, so a stray match is visible before agents act.
 - **Transcript echo.** The hub posts `🎙️ heard → @…: "transcript"` (`HUB_VOICE_ECHO`, default on) — a
   colleague-style paraphrase that lets the operator catch a mis-hear *or* a mis-address before agents
   act. Governor-neutral, one line. An unclear/unaddressed note gets a brief explanatory notice, never

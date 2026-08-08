@@ -48,8 +48,26 @@ describe("resolveSpokenRecipients", () => {
     });
   });
 
-  it("does not match too-short leading tokens", () => {
-    // "re" alone (len 2) must not match re-infra/re-gitops
+  it("does not substring-match too-short leading tokens", () => {
+    // "re" alone (len 2) must not loosely substring-match re-infra/re-gitops
     expect(resolveSpokenRecipients("re do the thing", roster).recipients).toEqual([]);
+  });
+
+  it("matches a short (2-char) agent name exactly (#65)", () => {
+    const short = ["conn", "kb", "iam", "platform"];
+    expect(resolveSpokenRecipients("kb can you deploy", short).recipients).toEqual(["kb"]);
+    expect(resolveSpokenRecipients("KB, deploy", short).recipients).toEqual(["kb"]);
+    expect(resolveSpokenRecipients("iam rotate the key", short).recipients).toEqual(["iam"]);
+  });
+
+  it("tolerates a near-miss transcription (one edit) for a longer name (#65)", () => {
+    // "platfrom" (transposed) → platform
+    expect(resolveSpokenRecipients("platfrom redeploy", roster).recipients).toEqual(["platform"]);
+  });
+
+  it("still handles the messy short-name transcripts from the report (#65)", () => {
+    const short = ["conn", "kb"];
+    expect(resolveSpokenRecipients("Con. can you hear me", short).recipients).toEqual(["conn"]);
+    expect(resolveSpokenRecipients("KB123 deploy", short).recipients).toEqual(["kb"]);
   });
 });

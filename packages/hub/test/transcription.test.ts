@@ -65,6 +65,14 @@ describe("HttpTranscriptionService", () => {
     expect(captured.body).toContain("OGG-BYTES");
   });
 
+  it("sends a prompt (agent-name bias) when provided", async () => {
+    const { url, captured } = await startServer(() => ({ status: 200, json: { text: "ok" } }));
+    const svc = new HttpTranscriptionService({ url, model: "small" });
+    await svc.transcribe(audio, { prompt: "Agent names: conn, kb, platform." });
+    expect(captured.body).toContain('name="prompt"');
+    expect(captured.body).toContain("conn, kb, platform");
+  });
+
   it("sends a language field only when not auto", async () => {
     // explicit language
     {

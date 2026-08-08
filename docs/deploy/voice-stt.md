@@ -168,8 +168,14 @@ See [../configuration.md](../configuration.md) for the full surface.
   GitOps, sync up" (multicast), "Everyone, stand down" (broadcast). The hub echoes the
   transcript **and the resolved recipients**, so a mis-hear or mis-address is visible
   before agents act.
+- **Short names transcribe better automatically:** the hub primes the STT model with the
+  live agent names (as a prompt) and matches tolerantly (exact/substring/one-edit), so
+  short repo tokens like `kb` or `conn` resolve without you typing a tag. Naming an agent
+  correctly needs it to be **connected** (only live names bias the model and match).
 - **Verify:** send a voice note and watch the hub logs for `transcribed voice note`
   (the hub fetched + transcribed it) followed by `voice note routed`. If you see a
   `🎙️ voice messages aren't enabled here` notice, `HUB_STT_URL` isn't set; a
   `couldn't make out that voice note` means the STT service returned an empty
-  transcript (check its logs / the model).
+  transcript (check its logs / the model). If it `couldn't tell who it's for`, the leading
+  name didn't resolve — reply to the agent's message, or check the name transcribed close
+  enough (the `🎙️ heard` echo shows what was heard).
