@@ -173,9 +173,11 @@ See [../configuration.md](../configuration.md) for the full surface.
   the operator listens to. The same guards apply (code/links/long → text), and an agent
   can still force text on a specific reply with `voice: false`. Default off; consider it
   a per-room preference until per-operator control lands ([#70](https://github.com/menus12/claude-telegram-hub/issues/70)).
-- **Mute a room at runtime.** Any allowed operator can run `/voice off` in a room to make
-  replies there come as text (and `/voice on` to restore) — a per-room override on top of
-  the deployment's TTS/`HUB_TTS_AUTO` setting, persisted in `HUB_STATE_FILE` (#70).
+- **Mute a room at runtime.** An admin can run `/voice off` in a room to make replies there
+  come as text (and `/voice on` to restore) — a per-room override on top of the deployment's
+  TTS/`HUB_TTS_AUTO` setting, persisted in `HUB_STATE_FILE` (#70). More broadly, `/config`,
+  `/set`, and `/unset` tune voice knobs (`ttsauto`, `ttsmaxchars`, `ttsvoice`, `ttsvoicemap`)
+  live without a redeploy — see [../usage.md § Tuning features from chat](../usage.md).
 - **How agents should use voice** (reply-in-kind, spoken-friendly rendering, when *not*
   to voice) is a shared-room convention, not a deploy knob — see
   [../coordination.md § Voice](../coordination.md). In short: a voice-in gets a voice-out

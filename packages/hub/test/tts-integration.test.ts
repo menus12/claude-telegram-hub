@@ -287,6 +287,33 @@ describe("voiced replies (TTS)", () => {
     });
   });
 
+  it("/set ttsauto on takes effect live (no restart) — a no-flag reply gets voiced (#config)", async () => {
+    const synth = new FakeSynthesisService();
+    const { adapter, url } = await startHub(synth); // HUB_TTS_AUTO defaults off
+    const a = attach(url, "platform");
+    await waitFor(a.registered);
+
+    // baseline: no flag, auto off → text
+    a.client.sendReply({ room: "-100", text: "before" });
+    await waitFor(() => adapter.sent.some((s) => s.out.text === "before"));
+    expect(adapter.sentVoices).toHaveLength(0);
+
+    // admin flips auto on at runtime (user1 is the allowlist seed → admin)
+    await adapter.deliver({
+      adapter: "loopback",
+      room: "-100",
+      fromKind: "human",
+      fromId: "user1",
+      text: "/set ttsauto on",
+      mentions: [],
+    });
+    await waitFor(() => adapter.sent.some((s) => s.out.text.includes("ttsauto = on")));
+
+    // now the same no-flag reply is voiced
+    a.client.sendReply({ room: "-100", text: "after, all green" });
+    await waitFor(() => adapter.sentVoices.length >= 1);
+  });
+
   it("a normal reply (no voice) is still text", async () => {
     const synth = new FakeSynthesisService();
     const { adapter, url } = await startHub(synth);
