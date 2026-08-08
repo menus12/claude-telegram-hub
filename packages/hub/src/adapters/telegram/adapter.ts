@@ -8,6 +8,7 @@ import type {
 } from "@claude-telegram-hub/protocol";
 import type { Inbox, TransportAdapter } from "../../adapter.js";
 import type { Logger } from "../../logger.js";
+import type { TranscriptionService } from "../../transcription.js";
 import { toTelegramMarkdown } from "./format.js";
 import { toInboundMessage } from "./normalize.js";
 import { ReplyIndex } from "./reply-index.js";
@@ -35,6 +36,11 @@ export interface TelegramAdapterOptions {
    * agent. Defaults to a fresh bounded index; inject one to control its clock/bounds.
    */
   replyIndex?: ReplyIndex;
+  /**
+   * Speech-to-text for voice notes. When absent, a voice note is still surfaced
+   * (marked `voice`, empty text) so the hub can tell the operator voice is off.
+   */
+  transcriber?: TranscriptionService;
 }
 
 /**
@@ -109,13 +115,24 @@ export class TelegramAdapter implements TransportAdapter {
     this.inbox = undefined;
   }
 
+  /**
+   * Resolve a reply's target agent: the message-id index (fast path, this process),
+   * falling back to the author's `agent ▸ …` attribution in the replied-to text
+   * (needs no index, so it survives a hub restart / index eviction).
+   */
+  private resolveReplyTarget(room: string, messageId: number, text?: string): string | undefined {
+    return this.replies.resolve(room, messageId) ?? (text ? parseAttribution(text) : undefined);
+  }
+
   private handle(msg: TgMessage): void {
+    if (msg.voice) {
+      void this.handleVoice(msg).catch((err: unknown) => {
+        this.opts.logger?.("warn", "failed to handle voice note", { error: String(err) });
+      });
+      return;
+    }
     const message = toInboundMessage(msg, this.opts.tagSigil, (reply) =>
-      // Fast path: the message-id index (this process). Fallback: the author's
-      // `agent ▸ …` attribution in the replied-to text, which needs no index and
-      // so survives a hub restart / index eviction.
-      this.replies.resolve(reply.room, reply.messageId) ??
-      (reply.text !== undefined ? parseAttribution(reply.text) : undefined),
+      this.resolveReplyTarget(reply.room, reply.messageId, reply.text),
     );
     if (!message) return;
     const inbox = this.inbox;
@@ -169,6 +186,67 @@ export class TelegramAdapter implements TransportAdapter {
       mimeType: att.mimeType,
       dataBase64: bytes.toString("base64"),
     };
+  }
+
+  /**
+   * Transcribe a voice note and hand it to the hub as a `voice`-marked message
+   * (text = transcript). Reply-to still addresses (resolved here); spoken-name /
+   * broadcast addressing and the transcript echo happen hub-side. With no
+   * transcriber configured, or on a fetch/transcribe failure, the text is empty —
+   * the hub then tells the operator voice is off / it couldn't make out the note.
+   */
+  private async handleVoice(msg: TgMessage): Promise<void> {
+    const inbox = this.inbox;
+    const from = msg.from;
+    const voice = msg.voice;
+    if (!inbox || !voice || !from || from.is_bot) return;
+    const room = String(msg.chat.id);
+
+    const mentions: string[] = [];
+    const repliedTo = msg.reply_to_message;
+    if (repliedTo) {
+      const agent = this.resolveReplyTarget(room, repliedTo.message_id, repliedTo.text);
+      if (agent) mentions.push(agent);
+    }
+
+    const message: InboundMessage = {
+      adapter: "telegram",
+      room,
+      fromKind: "human",
+      fromId: String(from.id),
+      text: this.opts.transcriber ? await this.transcribeVoice(voice) : "",
+      mentions,
+      voice: true,
+    };
+    await inbox(message);
+  }
+
+  /** Fetch a voice note's bytes and transcribe; returns "" on any failure. */
+  private async transcribeVoice(voice: NonNullable<TgMessage["voice"]>): Promise<string> {
+    if (voice.fileSize !== undefined && voice.fileSize > INBOUND_MAX_BYTES) {
+      this.opts.logger?.("warn", "voice note too large to fetch", { fileSize: voice.fileSize });
+      return "";
+    }
+    const bytes = await this.opts.api.downloadFile(voice.fileId);
+    if (!bytes) {
+      this.opts.logger?.("warn", "voice note download failed");
+      return "";
+    }
+    try {
+      const { text } = await (this.opts.transcriber as TranscriptionService).transcribe({
+        bytes,
+        filename: "voice.ogg",
+        mimeType: voice.mimeType,
+      });
+      this.opts.logger?.("info", "transcribed voice note", {
+        bytes: bytes.length,
+        chars: text.length,
+      });
+      return text;
+    } catch (err) {
+      this.opts.logger?.("warn", "voice transcription failed", { error: String(err) });
+      return "";
+    }
   }
 }
 
