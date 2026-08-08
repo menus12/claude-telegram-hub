@@ -208,6 +208,48 @@ describe("voiced replies (TTS)", () => {
     });
   });
 
+  describe("per-language voice (#71)", () => {
+    async function startBilingual(synth: SynthesisService) {
+      return startHub(synth, undefined, {
+        HUB_TTS_VOICE: "af_sky",
+        HUB_TTS_VOICE_MAP: "en:af_sky,ru:af_ru",
+      });
+    }
+
+    it("voices an English reply with the EN voice", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startBilingual(synth);
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      a.client.sendReply({ room: "-100", text: "all green, deployed", voice: true });
+      await waitFor(() => adapter.sentVoices.length >= 1);
+      expect(synth.voices[0]).toBe("af_sky");
+    });
+
+    it("voices a Russian reply with the RU voice, in the same room", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startBilingual(synth);
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      a.client.sendReply({ room: "-100", text: "готово, задеплоил в прод", voice: true });
+      await waitFor(() => adapter.sentVoices.length >= 1);
+      expect(synth.voices[0]).toBe("af_ru");
+    });
+
+    it("uses the hub's default voice when no map is configured", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth); // no map, no HUB_TTS_VOICE
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      a.client.sendReply({ room: "-100", text: "готово", voice: true });
+      await waitFor(() => adapter.sentVoices.length >= 1);
+      expect(synth.voices[0]).toBeUndefined(); // synth falls back to its own default
+    });
+  });
+
   it("a normal reply (no voice) is still text", async () => {
     const synth = new FakeSynthesisService();
     const { adapter, url } = await startHub(synth);

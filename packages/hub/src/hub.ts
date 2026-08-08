@@ -10,6 +10,7 @@ import {
 } from "@claude-telegram-hub/protocol";
 import { isBroadcastMention, speakableText } from "@claude-telegram-hub/protocol";
 import { resolveSpokenRecipients } from "./voice-routing.js";
+import { pickVoice } from "./voice-lang.js";
 import type {
   FilePayload,
   HubConfig,
@@ -70,6 +71,8 @@ export class Hub {
   private readonly synth: SynthesisService | undefined;
   private readonly ttsMaxChars: number;
   private readonly ttsAuto: boolean;
+  private readonly ttsVoiceDefault: string | undefined;
+  private readonly ttsVoiceMap: Record<string, string> | undefined;
   private readonly governor: LoopGovernor;
   private readonly presence: PresenceTracker | undefined;
   private readonly sla: ResponseSla | undefined;
@@ -93,6 +96,8 @@ export class Hub {
     this.synth = deps.synth;
     this.ttsMaxChars = deps.config.ttsMaxChars;
     this.ttsAuto = deps.config.ttsAuto;
+    this.ttsVoiceDefault = deps.config.ttsVoice;
+    this.ttsVoiceMap = deps.config.ttsVoiceMap;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = deps.config.sla
       ? new ResponseSla({
@@ -382,7 +387,13 @@ export class Hub {
       const spoken = speakableText(source, this.ttsMaxChars);
       if (spoken) {
         try {
-          const { audio, mimeType } = await this.synth.synthesize(spoken);
+          // Pick a voice matching the reply's language for a bilingual room (#71);
+          // no map → the synth's default voice.
+          const voice = pickVoice(spoken, this.ttsVoiceDefault, this.ttsVoiceMap);
+          const { audio, mimeType } = await this.synth.synthesize(
+            spoken,
+            voice ? { voice } : {},
+          );
           if (mimeType === "audio/ogg") {
             await this.deps.adapter.sendVoice(target, { agent, audio, mimeType, text: reply.text });
             return;

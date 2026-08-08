@@ -6,6 +6,8 @@ import type { SynthesisResult, SynthesisService } from "../src/index.js";
  */
 export class FakeSynthesisService implements SynthesisService {
   readonly calls: string[] = [];
+  /** The per-call `voice` passed alongside each `calls` entry (or undefined). */
+  readonly voices: (string | undefined)[] = [];
 
   constructor(
     private readonly result:
@@ -16,8 +18,9 @@ export class FakeSynthesisService implements SynthesisService {
     },
   ) {}
 
-  synthesize(text: string): Promise<SynthesisResult> {
+  synthesize(text: string, opts?: { voice?: string }): Promise<SynthesisResult> {
     this.calls.push(text);
+    this.voices.push(opts?.voice);
     const r = typeof this.result === "function" ? this.result(text) : this.result;
     return Promise.resolve(r);
   }
