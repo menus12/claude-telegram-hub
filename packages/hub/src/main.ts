@@ -50,9 +50,9 @@ async function main(): Promise<void> {
   const cfg = loadHubConfig(process.env);
   const log = makeLogger(cfg.logLevel);
   // Late-bound so the adapter can read the hub's live roster (for STT prompt-biasing)
-  // — the thunk is only called when a voice note arrives, well after `hub` is set.
-  let hub: Hub | undefined;
-  const adapter = buildAdapter(cfg, process.env, log, () => hub?.connectedAgents() ?? []);
+  // — the thunk is only called when a voice note arrives, well after the hub is set.
+  const hubRef: { current?: Hub } = {};
+  const adapter = buildAdapter(cfg, process.env, log, () => hubRef.current?.connectedAgents() ?? []);
   // Text-to-speech (voiced replies) is enabled by pointing HUB_TTS_URL at a service;
   // config validation guarantees model + voice are present when the URL is set.
   const synth =
@@ -67,10 +67,11 @@ async function main(): Promise<void> {
           logger: log,
         })
       : undefined;
-  hub = new Hub({ config: cfg, adapter, logger: log, ...(synth ? { synth } : {}) });
+  const hub = new Hub({ config: cfg, adapter, logger: log, ...(synth ? { synth } : {}) });
+  hubRef.current = hub;
 
   const shutdown = (): void => {
-    void hub?.stop().finally(() => process.exit(0));
+    void hub.stop().finally(() => process.exit(0));
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
