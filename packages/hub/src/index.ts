@@ -22,5 +22,11 @@ export {
   type AudioInput,
   type HttpTranscriptionOptions,
 } from "./transcription.js";
+export {
+  HttpSynthesisService,
+  type SynthesisService,
+  type SynthesisResult,
+  type HttpSynthesisOptions,
+} from "./synthesis.js";
 export { LoopbackAdapter, type SentMessage } from "./adapters/loopback.js";
 export { makeLogger, type Logger } from "./logger.js";

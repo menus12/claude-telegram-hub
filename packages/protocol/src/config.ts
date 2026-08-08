@@ -138,6 +138,17 @@ export const hubConfigSchema = z.object({
   sttLang: z.string().min(1).default("auto"),
   /** Echo a voice note's transcript (and resolved recipients) into the room. */
   voiceEcho: z.boolean().default(true),
+  /**
+   * Text-to-speech service base URL (OpenAI-compatible, exposes
+   * `POST /v1/audio/speech`). Unset = agents can't reply with voice.
+   */
+  ttsUrl: z.string().url().optional(),
+  /** TTS model id (server-specific). Required when `ttsUrl` is set. */
+  ttsModel: z.string().min(1).optional(),
+  /** TTS voice id (language-specific). Required when `ttsUrl` is set. */
+  ttsVoice: z.string().min(1).optional(),
+  /** TTS response format; `opus` → OGG/Opus (a Telegram voice note). */
+  ttsFormat: z.string().min(1).default("opus"),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -154,10 +165,15 @@ export const hubConfigSchema = z.object({
   /** Which transport adapter to load. */
   adapter: z.string().min(1).default("telegram"),
   logLevel: logLevelSchema.default("info"),
-}).refine((c) => c.answerSlaMs > c.ackSlaMs, {
-  message: "answerSlaMs (HUB_ANSWER_SLA) must be greater than ackSlaMs (HUB_ACK_SLA)",
-  path: ["answerSlaMs"],
-});
+})
+  .refine((c) => c.answerSlaMs > c.ackSlaMs, {
+    message: "answerSlaMs (HUB_ANSWER_SLA) must be greater than ackSlaMs (HUB_ACK_SLA)",
+    path: ["answerSlaMs"],
+  })
+  .refine((c) => !c.ttsUrl || (c.ttsModel !== undefined && c.ttsVoice !== undefined), {
+    message: "HUB_TTS_MODEL and HUB_TTS_VOICE are required when HUB_TTS_URL is set",
+    path: ["ttsModel"],
+  });
 export type HubConfig = z.infer<typeof hubConfigSchema>;
 
 /** Env var names for hub-core config (single source of truth for docs + loader). */
@@ -181,6 +197,10 @@ export const HUB_ENV = {
   sttModel: "HUB_STT_MODEL",
   sttLang: "HUB_STT_LANG",
   voiceEcho: "HUB_VOICE_ECHO",
+  ttsUrl: "HUB_TTS_URL",
+  ttsModel: "HUB_TTS_MODEL",
+  ttsVoice: "HUB_TTS_VOICE",
+  ttsFormat: "HUB_TTS_FORMAT",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -212,6 +232,10 @@ export function loadHubConfig(env: Env): HubConfig {
       sttModel: env[HUB_ENV.sttModel],
       sttLang: env[HUB_ENV.sttLang],
       voiceEcho: bool(env[HUB_ENV.voiceEcho]),
+      ttsUrl: env[HUB_ENV.ttsUrl],
+      ttsModel: env[HUB_ENV.ttsModel],
+      ttsVoice: env[HUB_ENV.ttsVoice],
+      ttsFormat: env[HUB_ENV.ttsFormat],
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),
