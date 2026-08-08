@@ -136,6 +136,10 @@ export const hubConfigSchema = z.object({
   sttModel: z.string().min(1).default("small"),
   /** STT language: `auto` (detect) or an ISO code such as `ru` / `en`. */
   sttLang: z.string().min(1).default("auto"),
+  /** API key for a cloud STT service (sent as `Authorization: Bearer …` by default). */
+  sttApiKey: z.string().min(1).optional(),
+  /** STT auth header name; override to `api-key` for Azure OpenAI. */
+  sttAuthHeader: z.string().min(1).optional(),
   /** Echo a voice note's transcript (and resolved recipients) into the room. */
   voiceEcho: z.boolean().default(true),
   /**
@@ -149,6 +153,10 @@ export const hubConfigSchema = z.object({
   ttsVoice: z.string().min(1).optional(),
   /** TTS response format; `opus` → OGG/Opus (a Telegram voice note). */
   ttsFormat: z.string().min(1).default("opus"),
+  /** API key for a cloud TTS service (sent as `Authorization: Bearer …` by default). */
+  ttsApiKey: z.string().min(1).optional(),
+  /** TTS auth header name; override to `api-key` for Azure OpenAI. */
+  ttsAuthHeader: z.string().min(1).optional(),
   /** Skip voicing a reply whose speakable text exceeds this many characters. */
   ttsMaxChars: z.number().int().positive().default(300),
   /** Token that marks an agent mention. */
@@ -198,12 +206,16 @@ export const HUB_ENV = {
   sttUrl: "HUB_STT_URL",
   sttModel: "HUB_STT_MODEL",
   sttLang: "HUB_STT_LANG",
+  sttApiKey: "HUB_STT_API_KEY",
+  sttAuthHeader: "HUB_STT_AUTH_HEADER",
   voiceEcho: "HUB_VOICE_ECHO",
   ttsUrl: "HUB_TTS_URL",
   ttsModel: "HUB_TTS_MODEL",
   ttsVoice: "HUB_TTS_VOICE",
   ttsFormat: "HUB_TTS_FORMAT",
   ttsMaxChars: "HUB_TTS_MAX_CHARS",
+  ttsApiKey: "HUB_TTS_API_KEY",
+  ttsAuthHeader: "HUB_TTS_AUTH_HEADER",
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
@@ -234,12 +246,16 @@ export function loadHubConfig(env: Env): HubConfig {
       sttUrl: env[HUB_ENV.sttUrl],
       sttModel: env[HUB_ENV.sttModel],
       sttLang: env[HUB_ENV.sttLang],
+      sttApiKey: env[HUB_ENV.sttApiKey],
+      sttAuthHeader: env[HUB_ENV.sttAuthHeader],
       voiceEcho: bool(env[HUB_ENV.voiceEcho]),
       ttsUrl: env[HUB_ENV.ttsUrl],
       ttsModel: env[HUB_ENV.ttsModel],
       ttsVoice: env[HUB_ENV.ttsVoice],
       ttsFormat: env[HUB_ENV.ttsFormat],
       ttsMaxChars: num(env[HUB_ENV.ttsMaxChars]),
+      ttsApiKey: env[HUB_ENV.ttsApiKey],
+      ttsAuthHeader: env[HUB_ENV.ttsAuthHeader],
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),

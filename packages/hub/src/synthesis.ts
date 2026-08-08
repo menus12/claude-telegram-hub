@@ -1,4 +1,5 @@
 import type { Logger } from "./logger.js";
+import { authHeaders, resolveEndpoint } from "./transcription.js";
 
 export interface SynthesisResult {
   audio: Buffer;
@@ -18,7 +19,10 @@ export interface SynthesisService {
 }
 
 export interface HttpSynthesisOptions {
-  /** Service base URL; `/v1/audio/speech` is appended. */
+  /**
+   * Service base URL — `/v1/audio/speech` is appended, unless the URL is already a
+   * full endpoint (contains `/audio/speech`), in which case it's used verbatim.
+   */
   url: string;
   /** Model id sent to the service (server-specific). */
   model: string;
@@ -26,6 +30,10 @@ export interface HttpSynthesisOptions {
   voice: string;
   /** Response format; `opus` (→ OGG/Opus, Telegram's voice-note format) by default. */
   format?: string;
+  /** API key for a cloud service; sent as `Authorization: Bearer …` by default. */
+  apiKey?: string;
+  /** Auth header name; override to `api-key` for Azure OpenAI. Default `Authorization`. */
+  authHeader?: string;
   /** Request timeout; defaults to 30s. */
   timeoutMs?: number;
   logger?: Logger;
@@ -54,14 +62,17 @@ export class HttpSynthesisService implements SynthesisService {
   private readonly endpoint: string;
 
   constructor(private readonly opts: HttpSynthesisOptions) {
-    this.endpoint = `${opts.url.replace(/\/$/, "")}/v1/audio/speech`;
+    this.endpoint = resolveEndpoint(opts.url, "/v1/audio/speech");
   }
 
   async synthesize(text: string, opts?: { voice?: string }): Promise<SynthesisResult> {
     const format = this.opts.format ?? "opus";
     const res = await fetch(this.endpoint, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...authHeaders(this.opts.apiKey, this.opts.authHeader),
+      },
       body: JSON.stringify({
         model: this.opts.model,
         input: text,

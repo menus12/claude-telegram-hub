@@ -6,6 +6,7 @@ interface Captured {
   method?: string;
   url?: string;
   body: string;
+  headers: Record<string, string | string[] | undefined>;
 }
 
 let server: Server | undefined;
@@ -19,10 +20,11 @@ afterEach(async () => {
 async function startServer(
   respond: (captured: Captured) => { status: number; json: unknown },
 ): Promise<{ url: string; captured: Captured }> {
-  const captured: Captured = { body: "" };
+  const captured: Captured = { body: "", headers: {} };
   server = createServer((req, res) => {
     captured.method = req.method;
     captured.url = req.url;
+    captured.headers = req.headers;
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
@@ -92,5 +94,34 @@ describe("HttpTranscriptionService", () => {
     const svc = new HttpTranscriptionService({ url: `${url}/`, model: "small" });
     await svc.transcribe(audio);
     expect(captured.url).toBe("/v1/audio/transcriptions");
+  });
+
+  it("sends an API key (Bearer by default, or a custom header for Azure)", async () => {
+    {
+      const { url, captured } = await startServer(() => ({ status: 200, json: { text: "hi" } }));
+      const svc = new HttpTranscriptionService({ url, model: "whisper-1", apiKey: "sk-abc" });
+      await svc.transcribe(audio);
+      expect(captured.headers.authorization).toBe("Bearer sk-abc");
+    }
+    {
+      const { url, captured } = await startServer(() => ({ status: 200, json: { text: "hi" } }));
+      const svc = new HttpTranscriptionService({
+        url,
+        model: "whisper",
+        apiKey: "azkey",
+        authHeader: "api-key",
+      });
+      await svc.transcribe(audio);
+      expect(captured.headers["api-key"]).toBe("azkey");
+      expect(captured.headers.authorization).toBeUndefined();
+    }
+  });
+
+  it("uses a full endpoint URL verbatim (cloud non-standard path)", async () => {
+    const { url, captured } = await startServer(() => ({ status: 200, json: { text: "hi" } }));
+    const full = `${url}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01`;
+    const svc = new HttpTranscriptionService({ url: full, model: "whisper" });
+    await svc.transcribe(audio);
+    expect(captured.url).toBe("/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01");
   });
 });

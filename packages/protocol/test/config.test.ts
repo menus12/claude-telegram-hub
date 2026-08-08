@@ -32,6 +32,9 @@ describe("loadHubConfig", () => {
     expect(cfg.ttsUrl).toBeUndefined();
     expect(cfg.ttsFormat).toBe("opus");
     expect(cfg.ttsMaxChars).toBe(300);
+    expect(cfg.sttApiKey).toBeUndefined();
+    expect(cfg.ttsApiKey).toBeUndefined();
+    expect(cfg.sttAuthHeader).toBeUndefined();
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
@@ -87,6 +90,14 @@ describe("loadHubConfig", () => {
     expect(cfg.sttUrl).toBe("http://stt:8000");
     expect(cfg.sttModel).toBe("medium");
     expect(cfg.sttLang).toBe("ru");
+    const cloud = loadHubConfig({
+      ...minimal,
+      HUB_STT_URL: "https://api.openai.com",
+      HUB_STT_API_KEY: "sk-abc",
+      HUB_STT_AUTH_HEADER: "api-key",
+    });
+    expect(cloud.sttApiKey).toBe("sk-abc");
+    expect(cloud.sttAuthHeader).toBe("api-key");
     expect(() => loadHubConfig({ ...minimal, HUB_STT_URL: "not-a-url" })).toThrow(/sttUrl/);
   });
 
