@@ -97,8 +97,10 @@ Azure. Notes:
   Telegram **voice note** for `audio/ogg`; if your server returns mp3/wav instead, the
   hub falls back to posting the reply as **text** — so confirm your server supports
   opus.
-- **Voice is language-specific** (unlike STT's auto-detect): `HUB_TTS_VOICE` picks the
-  voice, so choose one matching the language your agents reply in.
+- **Voice is language-specific** (unlike STT's auto-detect): `HUB_TTS_VOICE` picks a
+  single voice, so choose one matching the language your agents reply in. A bilingual
+  room speaks the other language with the wrong phonetics today — per-language voice
+  selection is tracked in [#71](https://github.com/menus12/claude-telegram-hub/issues/71).
 - Some servers (e.g. speaches) expose **both** endpoints, so you can point
   `HUB_STT_URL` and `HUB_TTS_URL` at one instance.
 

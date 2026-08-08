@@ -212,13 +212,20 @@ a real data-residency/compliance gain, but not "the audio never leaves the build
   5. Allowlist check **before** transcribing (don't spend compute on non-allowlisted senders).
   6. Fake transcriber + loopback/fake-Bot-API tests. Ship the self-hosted faster-whisper sidecar as
      a documented deploy (compose service / ACI sidecar).
-- **Phase 2 — optional outbound TTS.** `HUB_TTS_URL`; render **short** agent replies to voice
-  alongside the text; opt-in per deployment; Piper default.
-- **Phase 3 (stretch) — quality/UX.** Confidence-gated confirmation, per-agent voice on/off,
-  streaming/partial transcripts if latency demands, per-room language hints.
+- **Phase 2 — optional outbound TTS.** ✅ **Shipped (v0.6.0–v0.6.1, [#60](https://github.com/menus12/claude-telegram-hub/issues/60)).**
+  `reply(voice: true)` → a captioned voice note via a pluggable `SynthesisService` (`HUB_TTS_URL`,
+  OpenAI-compatible `/v1/audio/speech`, opus); text stays authoritative; the hub skips code/links/long
+  text and falls back to text on failure. Self-hosted Piper/Kokoro or a cloud API.
+- **Phase 3 (stretch) — quality/UX (tracked follow-ups).** Optional `voiceText`
+  ([#68](https://github.com/menus12/claude-telegram-hub/issues/68)), auto-voice `HUB_TTS_AUTO`
+  ([#69](https://github.com/menus12/claude-telegram-hub/issues/69)), per-operator `/voice on|off`
+  ([#70](https://github.com/menus12/claude-telegram-hub/issues/70)), and **per-language voice
+  selection** for bilingual rooms ([#71](https://github.com/menus12/claude-telegram-hub/issues/71) —
+  the one known gap: TTS uses a single configured voice, so a reply in the other language is spoken
+  with the wrong phonetics).
 
-Splitting Phase 1 into implementation issues (transcription seam; Telegram voice handling + transcode;
-routing + echo; deploy the STT sidecar) is the natural next step once this recommendation is accepted.
+Both phases are implemented; Phase 1 landed across #53/#54/#55/#56 (+ deploy), Phase 2 across
+#61/#62/#63 (+ cloud #64).
 
 ---
 
