@@ -5,7 +5,7 @@ import type {
   OutboundMessage,
   RouteTarget,
 } from "@claude-telegram-hub/protocol";
-import type { Inbox, TransportAdapter } from "../adapter.js";
+import type { Inbox, OutboundVoice, TransportAdapter } from "../adapter.js";
 
 export interface SentMessage {
   target: RouteTarget;
@@ -15,6 +15,11 @@ export interface SentMessage {
 export interface SentFile {
   target: RouteTarget;
   out: OutboundFile;
+}
+
+export interface SentVoice {
+  target: RouteTarget;
+  out: OutboundVoice;
 }
 
 /**
@@ -27,6 +32,7 @@ export class LoopbackAdapter implements TransportAdapter {
   readonly name = "loopback";
   readonly sent: SentMessage[] = [];
   readonly sentFiles: SentFile[] = [];
+  readonly sentVoices: SentVoice[] = [];
   private inbox: Inbox | undefined;
   private waiters: Array<{
     pred: (s: SentMessage) => boolean;
@@ -53,6 +59,11 @@ export class LoopbackAdapter implements TransportAdapter {
 
   sendFile(target: RouteTarget, out: OutboundFile): Promise<void> {
     this.sentFiles.push({ target, out });
+    return Promise.resolve();
+  }
+
+  sendVoice(target: RouteTarget, out: OutboundVoice): Promise<void> {
+    this.sentVoices.push({ target, out });
     return Promise.resolve();
   }
 

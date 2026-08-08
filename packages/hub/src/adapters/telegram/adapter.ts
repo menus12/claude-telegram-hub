@@ -6,7 +6,7 @@ import type {
   OutboundMessage,
   RouteTarget,
 } from "@claude-telegram-hub/protocol";
-import type { Inbox, TransportAdapter } from "../../adapter.js";
+import type { Inbox, OutboundVoice, TransportAdapter } from "../../adapter.js";
 import type { Logger } from "../../logger.js";
 import type { TranscriptionService } from "../../transcription.js";
 import { toTelegramMarkdown } from "./format.js";
@@ -108,6 +108,22 @@ export class TelegramAdapter implements TransportAdapter {
     } else {
       await this.opts.api.sendDocument(target.room, { bytes, filename }, opts);
     }
+  }
+
+  async sendVoice(target: RouteTarget, out: OutboundVoice): Promise<void> {
+    // The caption is the attributed full reply text (the source of truth); the audio
+    // is the spoken (sanitized) rendering. Sent plain (short replies, no markup).
+    const opts: SendFileOptions = {
+      caption: `${attributionPrefix(out.agent)}${out.text}`,
+      ...(target.replyToId ? { replyToMessageId: Number(target.replyToId) } : {}),
+    };
+    const sentId = await this.opts.api.sendVoice(
+      target.room,
+      { bytes: out.audio, filename: "reply.ogg" },
+      opts,
+    );
+    // Index it so a reply to the voice note routes back to the speaking agent.
+    if (sentId !== undefined) this.replies.record(target.room, sentId, out.agent);
   }
 
   async stop(): Promise<void> {

@@ -167,6 +167,20 @@ export class GrammyApi implements TelegramApi {
     return sent.message_id;
   }
 
+  async sendVoice(
+    chatId: string,
+    file: OutgoingFile,
+    opts?: SendFileOptions,
+  ): Promise<number | undefined> {
+    const sent = await this.bot.api.sendVoice(chatId, new InputFile(file.bytes, file.filename), {
+      ...(opts?.caption ? { caption: opts.caption } : {}),
+      ...(opts?.replyToMessageId
+        ? { reply_parameters: { message_id: opts.replyToMessageId } }
+        : {}),
+    });
+    return sent.message_id;
+  }
+
   async stop(): Promise<void> {
     await this.bot.stop();
   }

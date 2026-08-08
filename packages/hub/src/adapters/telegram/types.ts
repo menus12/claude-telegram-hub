@@ -80,5 +80,7 @@ export interface TelegramApi {
     file: OutgoingFile,
     opts?: SendFileOptions,
   ): Promise<number | undefined>;
+  /** Send OGG/Opus audio as a Telegram voice note. */
+  sendVoice(chatId: string, file: OutgoingFile, opts?: SendFileOptions): Promise<number | undefined>;
   stop(): Promise<void>;
 }

@@ -89,7 +89,10 @@ export function parseReplyArgs(args: unknown): ReplyInput {
     }
     mentions = a.mentions as string[];
   }
-  return { room: a.room, text: a.text, mentions };
+  if (a.voice !== undefined && typeof a.voice !== "boolean") {
+    throw new Error("reply: `voice` must be a boolean");
+  }
+  return { room: a.room, text: a.text, mentions, ...(a.voice ? { voice: true } : {}) };
 }
 
 export interface SendFileArgs {
@@ -204,6 +207,11 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
               type: "array",
               items: { type: "string" },
               description: "Agent names to tag for agent-to-agent coordination.",
+            },
+            voice: {
+              type: "boolean",
+              description:
+                "Also send this reply as a voice note (only for a short, spoken-appropriate message — not code, links, lists, or long text). Requires the hub to have TTS enabled.",
             },
           },
           required: ["room", "text"],

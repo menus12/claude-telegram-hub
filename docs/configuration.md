@@ -37,6 +37,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_TTS_MODEL` | string | — | TTS model id (server-specific). Required when `HUB_TTS_URL` is set. |
 | `HUB_TTS_VOICE` | string | — | TTS voice id (language-specific). Required when `HUB_TTS_URL` is set. |
 | `HUB_TTS_FORMAT` | string | `opus` | Response format requested; `opus` → OGG/Opus (a Telegram voice note). |
+| `HUB_TTS_MAX_CHARS` | int | `300` | Skip voicing a reply whose speakable text exceeds this — it's posted as text instead. |
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
 | `HUB_BIND_PORT` | int (0–65535) | `8787` | Port for the session-facing server (`0` = OS-assigned ephemeral). |

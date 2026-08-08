@@ -154,6 +154,11 @@ transcript's `voice` marker:
   colleague-style paraphrase that lets the operator catch a mis-hear *or* a mis-address before agents
   act. Governor-neutral, one line. An unclear/unaddressed note gets a brief explanatory notice, never
   a silent drop or an accidental broadcast.
+- **Voiced replies (opt-in, `HUB_TTS_URL`).** An agent may set `voice: true` on `reply` to also render
+  a **short** reply as a voice note — one message, captioned with the attributed text (the source of
+  truth). It's human-facing only (agent→agent re-injection stays text) and the hub is the safety net:
+  it skips voicing code / links / over-length text and falls back to text if synthesis fails, so
+  `voice: true` never *replaces* the text and never breaks a reply.
 
 ## Agent-to-agent coordination
 
