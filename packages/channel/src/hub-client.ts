@@ -18,6 +18,8 @@ export interface ReplyInput {
   replyToId?: string;
   /** Also render this (short) reply as a voice note, if the hub has TTS enabled. */
   voice?: boolean;
+  /** Distinct words to speak (vs the displayed `text`), when `voice` is set. */
+  voiceText?: string;
 }
 
 export interface SendFileInput {
@@ -89,6 +91,7 @@ export class HubClient implements HubLike {
       mentions: reply.mentions ?? [],
       ...(reply.replyToId ? { replyToId: reply.replyToId } : {}),
       ...(reply.voice ? { voice: true } : {}),
+      ...(reply.voiceText ? { voiceText: reply.voiceText } : {}),
     });
   }
 

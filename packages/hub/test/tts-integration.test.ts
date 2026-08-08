@@ -80,6 +80,24 @@ describe("voiced replies (TTS)", () => {
     expect(adapter.sent).toHaveLength(0); // no separate text copy
   });
 
+  it("speaks voiceText when given, keeping text as the caption (#68)", async () => {
+    const synth = new FakeSynthesisService();
+    const { adapter, url } = await startHub(synth);
+    const a = attach(url, "platform");
+    await waitFor(a.registered);
+
+    a.client.sendReply({
+      room: "-100",
+      text: "Done — deployed abc123 to prod, logs at https://logs.example/x",
+      voice: true,
+      voiceText: "Done, deployed to prod.",
+    });
+    await waitFor(() => adapter.sentVoices.length >= 1);
+    expect(synth.calls[0]).toBe("Done, deployed to prod."); // spoke voiceText
+    // caption is the full displayed text (source of truth), not voiceText
+    expect(adapter.sentVoices[0].out.text).toContain("abc123");
+  });
+
   it("falls back to text when the reply isn't speakable (code)", async () => {
     const synth = new FakeSynthesisService();
     const { adapter, url } = await startHub(synth);
