@@ -8,7 +8,7 @@ import {
   voiceUnaddressedNotice,
   voiceUnclearNotice,
 } from "@claude-telegram-hub/protocol";
-import { isBroadcastMention } from "@claude-telegram-hub/protocol";
+import { isBroadcastMention, speakableText } from "@claude-telegram-hub/protocol";
 import { resolveSpokenRecipients } from "./voice-routing.js";
 import type {
   FilePayload,
@@ -28,7 +28,6 @@ import { ResponseSla, type PendingAsk } from "./response-sla.js";
 import type { Scheduler } from "./scheduler.js";
 import { SessionServer } from "./server.js";
 import type { SynthesisService } from "./synthesis.js";
-import { speakableText } from "./tts-text.js";
 import type { Logger } from "./logger.js";
 
 export interface HubDeps {
@@ -123,6 +122,9 @@ export class Hub {
       onDuplicateRejected: (agent) => this.notify(duplicateRegistrationNotice(agent)),
       duplicateName: deps.config.duplicateName,
       keepaliveMs: deps.config.keepaliveMs,
+      // Advertise voice-reply capability so the channel can tell a sending agent
+      // when its voice:true reply won't be voiced (too long / unspeakable) (#74).
+      voiceReply: { enabled: this.synth !== undefined, maxChars: this.ttsMaxChars },
       isReady: () => this.started,
       logger: deps.logger,
     });

@@ -50,6 +50,11 @@ export interface SessionServerOptions {
    * the next tick's pong is terminated. `0` disables. Default 30000.
    */
   keepaliveMs?: number;
+  /**
+   * Voice-reply capability advertised to sessions in the `registered` frame, so the
+   * channel can tell a sending agent when a `voice: true` reply won't be voiced (#74).
+   */
+  voiceReply?: { enabled: boolean; maxChars: number };
 }
 
 /** Constant-time secret comparison (avoids leaking length-independent timing). */
@@ -281,6 +286,7 @@ export class SessionServer {
       type: "registered",
       agent: frame.agent,
       protocolVersion: PROTOCOL_VERSION,
+      ...(this.opts.voiceReply ? { voiceReply: this.opts.voiceReply } : {}),
     });
     this.opts.logger("info", "session registered", { agent: frame.agent });
     this.opts.onRegister?.(frame.agent);

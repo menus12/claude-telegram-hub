@@ -170,8 +170,9 @@ a second channel — the same "match verbosity to the medium" rule (A6) governs 
 4. **When *not* to voice.** Code, links, lists, exact values, or long technical detail → **text only**,
    even if the incoming was voice. Voicing those helps no one; the operator can ask you to say the gist.
 
-(If the hub can't voice a reply — too long or unspeakable — it posts it as text and logs why, so a
-"missing" voice note is diagnosable rather than a mystery.)
+(If the hub can't voice a reply — too long or unspeakable — it posts it as text. The `reply` tool
+result tells you it fell back and why, e.g. *"over this hub's 300-char cap"*, so you can shorten to a
+spoken summary and re-send; the hub logs it too. A "missing" voice note is diagnosable, not a mystery.)
 
 ---
 
