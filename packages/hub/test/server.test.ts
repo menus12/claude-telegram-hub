@@ -4,7 +4,7 @@ import { PROTOCOL_VERSION } from "@claude-telegram-hub/protocol";
 import type { ReplyFrame } from "@claude-telegram-hub/protocol";
 import { AgentRegistry, SessionServer } from "../src/index.js";
 import type { Session } from "../src/session.js";
-import { waitFor } from "./helpers.js";
+import { waitFor, delay } from "./helpers.js";
 
 interface Harness {
   server: SessionServer;
@@ -18,6 +18,7 @@ interface ServerOpts {
   registerTimeoutMs?: number;
   duplicateName?: "reject" | "replace";
   probeAlive?: (session: Session) => Promise<boolean>;
+  keepaliveMs?: number;
 }
 
 function makeServer(opts: ServerOpts = {}): Harness {
@@ -37,6 +38,7 @@ function makeServer(opts: ServerOpts = {}): Harness {
     registerTimeoutMs: opts.registerTimeoutMs ?? 500,
     ...(opts.duplicateName ? { duplicateName: opts.duplicateName } : {}),
     ...(opts.probeAlive ? { probeAlive: opts.probeAlive } : {}),
+    ...(opts.keepaliveMs !== undefined ? { keepaliveMs: opts.keepaliveMs } : {}),
   });
   return {
     server,
@@ -242,6 +244,50 @@ describe("SessionServer", () => {
     expect(frame.code).toBe("name_in_use");
     a.close();
     b.close();
+  });
+
+  it("pings connected sessions periodically so a quiet socket stays warm", async () => {
+    harness = makeServer({ keepaliveMs: 40 });
+    await harness.server.listen();
+    const ws = await open(`ws://127.0.0.1:${harness.server.port()}`);
+    register(ws, "re-infra");
+    await nextMessage(ws); // registered
+
+    let pings = 0;
+    ws.on("ping", () => (pings += 1));
+    await waitFor(() => pings >= 2); // the server is pinging on the interval
+    expect(ws.readyState).toBe(WebSocket.OPEN); // and the auto-ponging client stays connected
+    ws.close();
+  });
+
+  it("terminates a session that stops responding to pings", async () => {
+    harness = makeServer({ keepaliveMs: 40 });
+    await harness.server.listen();
+    // autoPong: false → the client receives pings but never pongs → reaped
+    const ws = new WebSocket(`ws://127.0.0.1:${harness.server.port()}`, { autoPong: false });
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", () => resolve());
+      ws.once("error", reject);
+    });
+    register(ws, "ghost");
+    await nextMessage(ws); // registered
+
+    await new Promise<void>((resolve) => ws.once("close", () => resolve()));
+    await waitFor(() => !harness!.registry.has("ghost")); // termination unregistered it
+  });
+
+  it("does not ping when keepalive is disabled (0)", async () => {
+    harness = makeServer({ keepaliveMs: 0 });
+    await harness.server.listen();
+    const ws = await open(`ws://127.0.0.1:${harness.server.port()}`);
+    register(ws, "re-infra");
+    await nextMessage(ws);
+
+    let pings = 0;
+    ws.on("ping", () => (pings += 1));
+    await delay(150);
+    expect(pings).toBe(0);
+    ws.close();
   });
 
   it("serves health and readiness probes", async () => {

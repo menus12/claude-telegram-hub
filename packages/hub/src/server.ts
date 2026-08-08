@@ -45,6 +45,11 @@ export interface SessionServerOptions {
   logger: Logger;
   /** How long a connection may stay unregistered before it's dropped. */
   registerTimeoutMs?: number;
+  /**
+   * Interval (ms) between keepalive pings to every connection; a peer that misses
+   * the next tick's pong is terminated. `0` disables. Default 30000.
+   */
+  keepaliveMs?: number;
 }
 
 /** Constant-time secret comparison (avoids leaking length-independent timing). */
@@ -63,6 +68,9 @@ function secretEquals(a: string, b: string): boolean {
 export class SessionServer {
   private readonly http: HttpServer;
   private readonly wss: WebSocketServer;
+  /** Per-connection liveness: set true on pong, false when a ping is sent. */
+  private readonly alive = new WeakMap<WebSocket, boolean>();
+  private keepaliveTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(private readonly opts: SessionServerOptions) {
     this.http = createServer((req, res) => this.handleHttp(req, res));
@@ -74,10 +82,39 @@ export class SessionServer {
     await new Promise<void>((resolve) => {
       this.http.listen(this.opts.port, this.opts.host, () => resolve());
     });
+    this.startKeepalive();
     this.opts.logger("info", "session server listening", {
       host: this.opts.host,
       port: this.port(),
     });
+  }
+
+  /**
+   * Periodically ping every connection so a quiet WebSocket isn't reaped by a
+   * reverse proxy's idle timeout (which would flap presence and open a message-loss
+   * window). The `ws` client answers pings automatically, so the ping/pong is
+   * bidirectional traffic that resets the proxy's idle timer. A peer that hasn't
+   * ponged since the last tick is terminated (its `close` unregisters it normally).
+   */
+  private startKeepalive(): void {
+    const interval = this.opts.keepaliveMs ?? 30_000;
+    if (interval <= 0) return;
+    this.keepaliveTimer = setInterval(() => {
+      for (const ws of this.wss.clients) {
+        if (this.alive.get(ws) === false) {
+          this.opts.logger("info", "terminating unresponsive session (missed keepalive)");
+          ws.terminate();
+          continue;
+        }
+        this.alive.set(ws, false);
+        try {
+          ws.ping();
+        } catch {
+          // A ping on a closing socket can throw; it'll be reaped next tick.
+        }
+      }
+    }, interval);
+    this.keepaliveTimer.unref?.();
   }
 
   /** The bound port (useful when configured port is 0 for an ephemeral port). */
@@ -87,6 +124,7 @@ export class SessionServer {
   }
 
   async close(): Promise<void> {
+    if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
     for (const client of this.wss.clients) client.terminate();
     await new Promise<void>((resolve) => this.wss.close(() => resolve()));
     await new Promise<void>((resolve) => this.http.close(() => resolve()));
@@ -111,6 +149,10 @@ export class SessionServer {
   private onConnection(ws: WebSocket): void {
     let session: Session | undefined;
     let registering = false;
+
+    // Keepalive liveness: fresh connections start alive; every pong re-arms it.
+    this.alive.set(ws, true);
+    ws.on("pong", () => this.alive.set(ws, true));
 
     const registerTimer = setTimeout(() => {
       if (!session) {

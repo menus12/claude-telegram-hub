@@ -32,6 +32,7 @@ describe("loadHubConfig", () => {
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
+    expect(cfg.keepaliveMs).toBe(30000);
     expect(cfg.adapter).toBe("telegram");
     expect(cfg.logLevel).toBe("info");
   });
