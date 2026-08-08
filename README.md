@@ -89,6 +89,7 @@ One always-on hub; the **same image runs everywhere** — only the environment d
 - **Azure Container Instances** — [docs/deploy/azure-container-instances.md](docs/deploy/azure-container-instances.md)
 - **systemd (co-located)** — [deploy/systemd/claude-telegram-hub.service](deploy/systemd/claude-telegram-hub.service)
 - **Thin channel install** — [docs/deploy/channel-install.md](docs/deploy/channel-install.md)
+- **Voice (speech-to-text)** — [docs/deploy/voice-stt.md](docs/deploy/voice-stt.md): opt-in `HUB_STT_URL` + a self-hosted Whisper sidecar
 - **Operations runbook** — [docs/runbooks/operations.md](docs/runbooks/operations.md)
 
 ## Contributing

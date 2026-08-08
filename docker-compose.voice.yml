@@ -1,0 +1,32 @@
+# Voice (speech-to-text) overlay — opt-in. Adds a self-hosted, OpenAI-compatible
+# Whisper service and points the hub at it, so operators can send voice notes.
+# Run alongside the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.voice.yml up -d
+#
+# See docs/deploy/voice-stt.md. Audio stays on the compose network (no published
+# port on the STT service) — only the hub reaches it.
+services:
+  hub:
+    environment:
+      HUB_STT_URL: http://stt:8000
+      # Model id as your STT server expects it. faster-whisper servers (speaches)
+      # take a HuggingFace id; adjust to `...-medium` for better Russian accuracy.
+      HUB_STT_MODEL: Systran/faster-whisper-small
+      # HUB_STT_LANG: auto   # or ru / en
+    depends_on:
+      - stt
+
+  stt:
+    # Any OpenAI-compatible transcription server works (exposes
+    # POST /v1/audio/transcriptions). This is faster-whisper on CPU — confirm the
+    # current image tag / port / model-id format against the server's own docs.
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    restart: unless-stopped
+    environment:
+      HF_HOME: /data/hf # cache downloaded models on the volume (first request is slow)
+    volumes:
+      - stt-models:/data/hf
+
+volumes:
+  stt-models:
