@@ -151,6 +151,30 @@ session and sees every message, so it holds the **durable** net for exactly that
 
 ---
 
+## Voice (when the room speaks)
+
+Some rooms carry voice both ways: the operator sends a voice note (transcribed and routed to you), and
+you can render a short reply as a voice note (`reply(voice: true)`). Voice is a **modality choice**, not
+a second channel — the same "match verbosity to the medium" rule (A6) governs it.
+
+1. **Reply in kind.** If the message you're answering came in as **voice** (the `<channel>` tag carries
+   `voice="true"`), reply with `voice: true` **by default** — don't make the operator ask, and don't
+   send a text reply *and then* a separate voice note. One coherent reply.
+2. **Write for the ear, not the eye.** The spoken text is not your chat text read aloud. Expand or
+   respell abbreviations and jargon a listener can't parse (`CAE` → "Container Apps", `ASAv` → "the
+   Cisco ASA virtual appliance"). Keep **hex strings, IPs, code, paths, links, and exact values out of
+   the spoken part** — say the gist, and put the precise values in the text/caption that rides along.
+3. **Gist + next action, within the cap.** A voiced reply is a short spoken summary (what happened,
+   what's next), not the full detail. The hub voices only up to a length cap and skips code/links/long
+   text, so keep it brief and speakable; the detail belongs in text.
+4. **When *not* to voice.** Code, links, lists, exact values, or long technical detail → **text only**,
+   even if the incoming was voice. Voicing those helps no one; the operator can ask you to say the gist.
+
+(If the hub can't voice a reply — too long or unspeakable — it posts it as text and logs why, so a
+"missing" voice note is diagnosable rather than a mystery.)
+
+---
+
 ## Litmus test
 
 Before sending, ask two things:
