@@ -29,6 +29,8 @@ describe("loadHubConfig", () => {
     expect(cfg.sttModel).toBe("small");
     expect(cfg.sttLang).toBe("auto");
     expect(cfg.voiceEcho).toBe(true);
+    expect(cfg.ttsUrl).toBeUndefined();
+    expect(cfg.ttsFormat).toBe("opus");
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
@@ -97,6 +99,22 @@ describe("loadHubConfig", () => {
     expect(cfg.admins).toEqual(["1", "2"]);
     expect(cfg.stateFile).toBe("/data/access.json");
     expect(cfg.pairing).toBe(true);
+  });
+
+  it("reads the TTS knobs and requires model+voice when the URL is set", () => {
+    const cfg = loadHubConfig({
+      ...minimal,
+      HUB_TTS_URL: "http://tts:8000",
+      HUB_TTS_MODEL: "kokoro",
+      HUB_TTS_VOICE: "af_sky",
+    });
+    expect(cfg.ttsUrl).toBe("http://tts:8000");
+    expect(cfg.ttsModel).toBe("kokoro");
+    expect(cfg.ttsVoice).toBe("af_sky");
+    // URL set but model/voice missing → rejected
+    expect(() => loadHubConfig({ ...minimal, HUB_TTS_URL: "http://tts:8000" })).toThrow(
+      /ttsModel/,
+    );
   });
 
   it("reads the notification target and rejects an unknown value", () => {
