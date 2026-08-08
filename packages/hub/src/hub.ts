@@ -380,7 +380,18 @@ export class Hub {
         } catch (err) {
           this.deps.logger("warn", "tts synthesis failed; posting text", { error: String(err) });
         }
+      } else {
+        // The reply was voice-requested but isn't speakable (too long, or all
+        // code/links/paths). Log why the voice didn't go out — a "missing" voice
+        // note is then diagnosable rather than a silent fallback (#67).
+        this.deps.logger("info", "voiced reply not speakable; posting text", {
+          agent,
+          chars: reply.text.length,
+          maxChars: this.ttsMaxChars,
+        });
       }
+    } else if (reply.voice && !this.synth) {
+      this.deps.logger("info", "voiced reply requested but TTS is disabled; posting text", { agent });
     }
     await this.deps.adapter.send(target, { agent, text: reply.text, kind: "reply" });
   }

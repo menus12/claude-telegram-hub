@@ -39,9 +39,15 @@ afterEach(async () => {
   hub = undefined;
 });
 
-async function startHub(synth?: SynthesisService): Promise<{ adapter: LoopbackAdapter; url: string }> {
+type LogCall = { level: string; msg: string };
+
+async function startHub(
+  synth?: SynthesisService,
+  logs?: LogCall[],
+): Promise<{ adapter: LoopbackAdapter; url: string }> {
   const adapter = new LoopbackAdapter();
-  hub = new Hub({ config: hubConfig(), adapter, logger: () => {}, ...(synth ? { synth } : {}) });
+  const logger = logs ? (level: string, msg: string) => logs.push({ level, msg }) : () => {};
+  hub = new Hub({ config: hubConfig(), adapter, logger, ...(synth ? { synth } : {}) });
   await hub.start();
   return { adapter, url: `ws://127.0.0.1:${hub.port()}` };
 }
@@ -85,6 +91,30 @@ describe("voiced replies (TTS)", () => {
     expect(adapter.sent[0].out.text).toContain("npm ci");
     expect(adapter.sentVoices).toHaveLength(0);
     expect(synth.calls).toHaveLength(0); // never synthesized
+  });
+
+  it("logs why a voiced reply fell back to text — unspeakable (#67)", async () => {
+    const logs: LogCall[] = [];
+    const synth = new FakeSynthesisService();
+    const { adapter, url } = await startHub(synth, logs);
+    const a = attach(url, "platform");
+    await waitFor(a.registered);
+
+    a.client.sendReply({ room: "-100", text: "```\nnpm ci\n```", voice: true });
+    await waitFor(() => adapter.sent.length >= 1);
+    expect(logs.some((l) => l.msg.includes("not speakable"))).toBe(true);
+    expect(synth.calls).toHaveLength(0);
+  });
+
+  it("logs why a voiced reply fell back to text — TTS disabled (#67)", async () => {
+    const logs: LogCall[] = [];
+    const { adapter, url } = await startHub(undefined, logs); // no synth
+    const a = attach(url, "platform");
+    await waitFor(a.registered);
+
+    a.client.sendReply({ room: "-100", text: "all green", voice: true });
+    await waitFor(() => adapter.sent.length >= 1);
+    expect(logs.some((l) => l.msg.includes("TTS is disabled"))).toBe(true);
   });
 
   it("falls back to text when synthesis fails", async () => {

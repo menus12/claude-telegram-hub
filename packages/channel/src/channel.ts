@@ -29,9 +29,12 @@ const INSTRUCTIONS = [
   "An inbound file is saved locally and its path given in the `attachment_path` attribute —",
   "open it with your normal file tools. To send a file out, call `send_file` with the `room`",
   "and a local `path` (plus an optional `caption`).",
-  "For a short, spoken-appropriate reply (a brief ack or answer) — especially when the message",
-  "you're answering has `voice=\"true\"` — set `voice: true` on `reply` to also send it as a voice",
-  "note. Don't voice code, links, lists, paths, or long text; those stay text-only.",
+  "When the message you're answering arrived as voice (its `<channel>` tag has `voice=\"true\"`),",
+  "reply in kind by default: set `voice: true` on your `reply` — one coherent reply, not a text",
+  "reply plus a separate voice note. Write the spoken text for the ear: expand abbreviations/jargon",
+  "(e.g. `CAE` -> \"Container Apps\"), keep it to a short gist + next action, and keep hex strings,",
+  "IPs, code, paths, links, and exact values OUT of the spoken text (they ride along in the message",
+  "text). Don't voice code, links, lists, or long/technical replies — those stay text-only.",
 ].join(" ");
 
 /**
@@ -215,7 +218,7 @@ export function buildChannel(cfg: ChannelConfig, deps: BuildChannelDeps = {}): C
             voice: {
               type: "boolean",
               description:
-                "Also send this reply as a voice note (only for a short, spoken-appropriate message — not code, links, lists, or long text). Requires the hub to have TTS enabled.",
+                "Also send this reply as a voice note. Use for a short, spoken-appropriate message — a gist + next action — especially when replying to a voice message. Write `text` for the ear: expand abbreviations, keep hex/IPs/code/links/exact-values out. Not for code, links, lists, or long text (the hub skips voicing those and posts text). Requires the hub to have TTS enabled.",
             },
           },
           required: ["room", "text"],
