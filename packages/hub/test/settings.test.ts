@@ -17,9 +17,9 @@ describe("tunables registry", () => {
     expect(() => T("ttsauto").parse("maybe")).toThrow(/on\/off/);
 
     expect(T("ttsmaxchars").parse("400")).toBe(400);
-    expect(() => T("ttsmaxchars").parse("0")).toThrow(/positive/);
-    expect(() => T("ttsmaxchars").parse("-5")).toThrow(/positive/);
-    expect(() => T("ttsmaxchars").parse("abc")).toThrow(/positive/);
+    expect(() => T("ttsmaxchars").parse("0")).toThrow(/>= 1/);
+    expect(() => T("ttsmaxchars").parse("-5")).toThrow(/>= 1/);
+    expect(() => T("ttsmaxchars").parse("abc")).toThrow(/>= 1/);
 
     expect(T("notify").parse("both")).toBe("both");
     expect(() => T("notify").parse("email")).toThrow(/dm\|rooms\|both/);

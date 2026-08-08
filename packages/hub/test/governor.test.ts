@@ -39,4 +39,11 @@ describe("LoopGovernor", () => {
     expect(g.budget("r")).toBe(2); // full when unseen
     expect(g.onAgentHop("r")).toEqual({ allowed: true, froze: false }); // 2->1
   });
+
+  it("reconfigure changes the budget applied on the next refill (#80)", () => {
+    const g = new LoopGovernor(3);
+    g.reconfigure(1);
+    g.refill("r"); // now opens at budget 1
+    expect(g.onAgentHop("r")).toEqual({ allowed: true, froze: true }); // 1->0 freeze
+  });
 });

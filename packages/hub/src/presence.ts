@@ -37,9 +37,16 @@ export class PresenceTracker {
   /** Agents whose session dropped and are within the grace window: name → cancel. */
   private readonly pendingOffline = new Map<string, () => void>();
   private readonly schedule: Scheduler;
+  private graceMs: number;
 
   constructor(private readonly opts: PresenceTrackerOptions) {
     this.schedule = opts.schedule ?? realScheduler;
+    this.graceMs = opts.graceMs;
+  }
+
+  /** Change the offline grace window at runtime; applies to detaches after. */
+  reconfigure(graceMs: number): void {
+    this.graceMs = graceMs;
   }
 
   /** A session for `agent` just registered. */
@@ -66,7 +73,7 @@ export class PresenceTracker {
       if (this.opts.isLive(agent)) return; // reconnected right at the edge — stay online
       this.online.delete(agent);
       this.opts.emit(presenceOfflineNotice(agent));
-    }, this.opts.graceMs);
+    }, this.graceMs);
     this.pendingOffline.set(agent, cancel);
   }
 

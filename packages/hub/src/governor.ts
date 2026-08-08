@@ -19,7 +19,12 @@ export interface GovernorDecision {
 export class LoopGovernor {
   private readonly threads = new Map<string, { budget: number; frozen: boolean }>();
 
-  constructor(private readonly fullBudget: number) {}
+  constructor(private fullBudget: number) {}
+
+  /** Change the hop budget at runtime; applies to threads opened/refilled after. */
+  reconfigure(fullBudget: number): void {
+    this.fullBudget = fullBudget;
+  }
 
   /** A human message in this room (re)opens the thread at full budget. */
   refill(room: string): void {

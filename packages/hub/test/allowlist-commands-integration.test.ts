@@ -214,4 +214,20 @@ describe("in-chat config commands (/config, /set, /unset)", () => {
     await delay(20);
     expect(text(adapter, (t) => t.includes("ttsauto"))).toBeUndefined();
   });
+
+  it("reconfigures a Tier-2 setting and keeps the SLA invariant (#80)", async () => {
+    const { adapter } = await startHub({ HUB_ACK_SLA: "1000", HUB_ANSWER_SLA: "2000" });
+
+    // a Tier-2 numeric is accepted and confirmed
+    await adapter.deliver(msg("admin1", "/set hopbudget 5"));
+    await waitFor(() => text(adapter, (t) => t.includes("hopbudget = 5")) !== undefined);
+
+    // keepalive accepts 0 (disable)
+    await adapter.deliver(msg("admin1", "/set keepalivems 0"));
+    await waitFor(() => text(adapter, (t) => t.includes("keepalivems = 0")) !== undefined);
+
+    // answerslams must stay greater than ackslams
+    await adapter.deliver(msg("admin1", "/set answerslams 500"));
+    await waitFor(() => text(adapter, (t) => t.includes("must be greater than ackslams")) !== undefined);
+  });
 });
