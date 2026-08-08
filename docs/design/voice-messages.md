@@ -1,6 +1,11 @@
 # Design & decision doc: voice messages over the hub (#37)
 
-Status: **research complete, recommendation below — not yet implemented.** This is the deliverable
+Status: **Phase 1 (inbound voice → text) implemented** — broadcast/recipient-set addressing
+([#53](https://github.com/menus12/claude-telegram-hub/pull/53)), the `TranscriptionService` seam
+([#54](https://github.com/menus12/claude-telegram-hub/pull/54)), voice addressing + transcript echo
+([#55](https://github.com/menus12/claude-telegram-hub/pull/55)), and Telegram `voice` handling
+(this). What remains is **deployment** (stand up a self-hosted Whisper sidecar) — no more app code.
+Phase 2 (opt-in outbound TTS) is future. This is the deliverable
 for [#37](https://github.com/menus12/claude-telegram-hub/issues/37): a concrete, privacy-compatible
 STT (and optional TTS) recommendation, where it runs, format handling, cost/latency, and a phased
 plan — with voice framed as a **modality inside our existing shared-room, co-worker conventions**,
@@ -122,12 +127,13 @@ self-hosting beats both on marginal cost while keeping data on-prem, so cloud is
 
 ### 3.3 Format / transcode
 
-Telegram voice notes are **OGG/Opus**. Universal path: **ffmpeg** (or `opusdec`) →
-**16 kHz, 16-bit, mono PCM WAV**, which every engine/SDK ingests (`ffmpeg -i in.ogg -ar 16000 -ac 1
--f wav out.wav`). faster-whisper/whisper.cpp can often pull OGG via their bundled ffmpeg, but doing
-the transcode explicitly in the hub-side service is the portable, engine-agnostic choice and is
-mandatory for the Azure JS SDK. The hub already downloads Telegram files (#36 `downloadFile`); the
-voice path reuses it.
+Telegram voice notes are **OGG/Opus**. **As implemented, the hub sends the OGG bytes as-is** to the
+OpenAI-compatible STT endpoint, which decodes them (faster-whisper / whisper.cpp servers and the
+OpenAI API all ingest OGG/Opus via their bundled ffmpeg). **No hub-side transcode is needed** for the
+recommended path — the hub stays free of an ffmpeg dependency, and the voice path reuses the existing
+`downloadFile` (#36). A transcode step (ffmpeg → 16 kHz mono WAV) is only required for a WAV-only
+endpoint (e.g. the Azure JS SDK, which we don't use); if such an endpoint is ever targeted, add it as
+an opt-in behind the `TranscriptionService` — the seam already isolates this choice.
 
 ---
 

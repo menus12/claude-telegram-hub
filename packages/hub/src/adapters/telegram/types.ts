@@ -30,6 +30,8 @@ export interface TgMessage {
   caption?: string;
   /** A photo or document attached to the message, normalized. */
   attachment?: TgAttachment;
+  /** A voice note (OGG/Opus) — transcribed to text, not delivered as a file. */
+  voice?: { fileId: string; mimeType: string; duration?: number; fileSize?: number };
   /**
    * The message this one replies to, if any. The bot sends everything, so
    * `reply_to_message.from` is always the bot and can't identify the agent; the

@@ -5,6 +5,7 @@ import { Hub } from "./hub.js";
 import { LoopbackAdapter } from "./adapters/loopback.js";
 import { GrammyApi } from "./adapters/telegram/grammy-api.js";
 import { TelegramAdapter } from "./adapters/telegram/adapter.js";
+import { HttpTranscriptionService } from "./transcription.js";
 import { makeLogger, type Logger } from "./logger.js";
 import type { TransportAdapter } from "./adapter.js";
 
@@ -19,10 +20,20 @@ function buildAdapter(
       return new LoopbackAdapter();
     case "telegram": {
       const tg = loadTelegramAdapterConfig(env);
+      // Voice transcription is enabled by pointing HUB_STT_URL at an STT service.
+      const transcriber = cfg.sttUrl
+        ? new HttpTranscriptionService({
+            url: cfg.sttUrl,
+            model: cfg.sttModel,
+            defaultLang: cfg.sttLang,
+            logger: log,
+          })
+        : undefined;
       return new TelegramAdapter({
         api: new GrammyApi(tg.botToken, log),
         tagSigil: cfg.tagSigil,
         logger: log,
+        ...(transcriber ? { transcriber } : {}),
       });
     }
     default:
