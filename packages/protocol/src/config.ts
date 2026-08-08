@@ -144,6 +144,13 @@ export const hubConfigSchema = z.object({
   bindHost: z.string().min(1).default("127.0.0.1"),
   // 0 is allowed: bind an OS-assigned ephemeral port (handy in tests/containers).
   bindPort: z.number().int().min(0).max(65535).default(8787),
+  /**
+   * Interval (ms) between WebSocket keepalive pings to each session. Keeps the
+   * connection warm under a reverse proxy's idle timeout (Azure Container Apps
+   * ~240s, nginx 60s, Cloudflare ~100s) so quiet sessions aren't reaped and
+   * presence doesn't flap. `0` disables it (fine for a co-located hub). Default 30s.
+   */
+  keepaliveMs: z.number().int().nonnegative().default(30000),
   /** Which transport adapter to load. */
   adapter: z.string().min(1).default("telegram"),
   logLevel: logLevelSchema.default("info"),
@@ -177,6 +184,7 @@ export const HUB_ENV = {
   tagSigil: "HUB_TAG_SIGIL",
   bindHost: "HUB_BIND_HOST",
   bindPort: "HUB_BIND_PORT",
+  keepaliveMs: "HUB_KEEPALIVE_MS",
   adapter: "HUB_ADAPTER",
   logLevel: "HUB_LOG_LEVEL",
 } as const;
@@ -207,6 +215,7 @@ export function loadHubConfig(env: Env): HubConfig {
       tagSigil: env[HUB_ENV.tagSigil],
       bindHost: env[HUB_ENV.bindHost],
       bindPort: num(env[HUB_ENV.bindPort]),
+      keepaliveMs: num(env[HUB_ENV.keepaliveMs]),
       adapter: env[HUB_ENV.adapter],
       logLevel: env[HUB_ENV.logLevel],
     },

@@ -62,6 +62,7 @@ Mismatched sessions are rejected with `auth_failed`.
 | Session rejected `name_in_use` | Another **live** session already holds that agent name | Give this session a distinct `TELEGRAM_HUB_AGENT`, or stop the other one. A genuine restart isn't rejected (the dead socket is taken over). Set `HUB_DUPLICATE_NAME=replace` to let newcomers take over instead. |
 | Tagged agent silent | Agent offline | The hub posts an in-room offline notice; start/attach that agent's session. |
 | Agent↔agent chatter stops with a "paused" notice | Hop budget exhausted | Expected — a human message in the room resumes it. Tune `HUB_HOP_BUDGET`. |
+| Every session detaches/reconnects on a fixed ~N-second clock; presence flaps | A reverse proxy is reaping the idle WebSocket (Azure Container Apps ~240s, nginx `proxy_read_timeout` 60s, Cloudflare ~100s) | Keepalive holds it open — ensure `HUB_KEEPALIVE_MS` (default 30000) is **below** the proxy's idle timeout. `0` disables it (only for a co-located hub with no proxy). |
 
 ## Protocol version compatibility
 

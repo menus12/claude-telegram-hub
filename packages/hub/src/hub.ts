@@ -114,6 +114,7 @@ export class Hub {
       onDetach: (agent) => this.presence?.onDetach(agent),
       onDuplicateRejected: (agent) => this.notify(duplicateRegistrationNotice(agent)),
       duplicateName: deps.config.duplicateName,
+      keepaliveMs: deps.config.keepaliveMs,
       isReady: () => this.started,
       logger: deps.logger,
     });

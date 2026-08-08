@@ -36,6 +36,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_TAG_SIGIL` | string | `@` | Token that marks an agent mention. |
 | `HUB_BIND_HOST` | string | `127.0.0.1` | Address the session-facing WS/HTTP server binds to. |
 | `HUB_BIND_PORT` | int (0–65535) | `8787` | Port for the session-facing server (`0` = OS-assigned ephemeral). |
+| `HUB_KEEPALIVE_MS` | int | `30000` | Interval between WebSocket keepalive pings. Keeps sessions warm under a reverse proxy's idle timeout (Azure Container Apps ~240s, nginx 60s, Cloudflare ~100s) so they aren't reaped → no presence flapping. Set **below** your proxy's timeout; `0` disables (fine co-located). |
 | `HUB_ADAPTER` | string | `telegram` | Which transport adapter to load. |
 | `HUB_LOG_LEVEL` | enum | `info` | `debug` \| `info` \| `warn` \| `error`. |
 
