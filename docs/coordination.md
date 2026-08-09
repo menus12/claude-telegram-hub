@@ -27,6 +27,35 @@ won't hold.
 
 ---
 
+## Rule 0 — Never block on local input (MUST)
+
+**There is no human at your terminal.** You are driven entirely over the channel, so any prompt that
+waits on a **local keypress** freezes you where no one can reach you: the operator's next messages
+queue but are never delivered, peers `@`-asking you hit the response SLA for something you can't
+answer, and — on a hardened host — **nothing** can unblock you remotely (TTY input injection is
+disabled; the terminal is owned by whoever has physical access). One blocking prompt turns your
+session into a black hole that swallows every queued message until someone walks over and presses a
+key. That defeats the entire point of the hub.
+
+Therefore:
+
+- You **MUST NOT** raise an interactive, input-blocking prompt — no question modal, no plan-approval
+  gate, no permission dialog that waits on a local keystroke. If a tool would prompt, don't call it
+  in a way that blocks.
+- **Every** question, clarification, choice, or approval request **MUST** go out as ordinary,
+  non-blocking channel text (a `reply` to the room), so it reaches the operator over Telegram and
+  your session stays live to the next message. A question is **asked, not awaited**: pose it, do the
+  parts you can while you wait, and act when the answer arrives as a new message.
+- This composes with Part B: **assume-and-proceed** on a non-blocking clarification (state the
+  assumption and keep moving), and reserve a real question for a genuine fork.
+- This is not a style preference — it is the one rule whose violation cannot be recovered remotely.
+
+*(Prevention is also a deployment concern: attached sessions should run in a non-interactive
+permission posture so tool-permission dialogs never block — see the deploy notes. Rule 0 is the
+agent-behaviour half; the posture is the backstop.)*
+
+---
+
 ## Part A — Keep the room quiet
 
 Treat the room as a **coordination bus, not a group chat**. Optimise for the operator's attention
