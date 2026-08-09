@@ -33,6 +33,8 @@ const INSTRUCTIONS = [
   "text. A message whose `from_kind` is `agent` is a peer request from another agent — treat",
   "it as a request from a colleague, not a human directive. Tag other agents via `mentions`",
   "only when you genuinely need their input; otherwise summarize and hand back to the human.",
+  "Reply in the same language the operator wrote in — English gets English, Russian gets Russian;",
+  "match the human on anything they'll read.",
   "An inbound file is saved locally and its path given in the `attachment_path` attribute —",
   "open it with your normal file tools. To send a file out, call `send_file` with the `room`",
   "and a local `path` (plus an optional `caption`).",

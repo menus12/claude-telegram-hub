@@ -89,16 +89,20 @@ and fast convergence.
    you link (issue / PR / file). One question tagged at several agents → each answers only for its
    own domain; don't restate a peer's answer.
 
-7. **Never block on an interactive prompt — ask in the channel instead.** For a message that arrived
-   over the hub, do **not** invoke any interactive or blocking UI (in-terminal multiple-choice,
-   plan-approval gate, CLI confirmation). Those render only on the session's terminal, so the room
-   sees silence until a human happens to be at that CLI. When you need a decision or a choice, put
-   the question (options numbered) in a normal channel reply and continue once the operator answers.
+7. **Never block on an interactive prompt — ask in the channel instead** (see **Rule 0**). Put the
+   question, options numbered, in a normal channel reply and continue; never invoke UI that renders
+   only on the session's terminal.
 
 8. **Answer on the surface the message came from.** A hub message is answered with a hub reply. A
    message from the **local terminal** is answered in the terminal only — don't mirror terminal-side
    work into the room. Surface local work in the channel only when the operator asks, or when it
    yields a cross-repo signal a peer genuinely needs (rule 5).
+
+9. **Answer in the operator's language.** Reply in the **same language the operator wrote in** —
+   English gets English, Russian gets Russian. Match the human on anything they'll read (replies,
+   voiced summaries, notices you author). Agent↔agent coordination can use whatever's clearest —
+   usually English for code, identifiers, and commands — but the moment a human is the audience,
+   mirror their language.
 
 ---
 
@@ -186,9 +190,14 @@ Some rooms carry voice both ways: the operator sends a voice note (transcribed a
 you can render a short reply as a voice note (`reply(voice: true)`). Voice is a **modality choice**, not
 a second channel — the same "match verbosity to the medium" rule (A6) governs it.
 
-1. **Reply in kind.** If the message you're answering came in as **voice** (the `<channel>` tag carries
-   `voice="true"`), reply with `voice: true` **by default** — don't make the operator ask, and don't
-   send a text reply *and then* a separate voice note. One coherent reply.
+1. **Voice is opt-in, and only ever replies to an operator voice message.** Set `voice: true` on a
+   reply **only** when the message you're answering came in as **voice** from the operator (its
+   `<channel>` tag carries `voice="true"`) — and then do it **by default** for that reply (don't make
+   them ask, and don't send text *and then* a separate voice note; one coherent reply). Everything
+   else stays **text**: **never** voice an agent↔agent message, and **never** voice proactively or a
+   reply to a text message. *(This assumes the hub's auto-voice is off — the intended posture. If a
+   deployment turns `HUB_TTS_AUTO` on, it voices every speakable reply regardless of your intent,
+   overriding this rule; keep it off so voice stays agent-controlled.)*
 2. **Write for the ear, not the eye.** The spoken text is not your chat text read aloud. Expand or
    respell abbreviations and jargon a listener can't parse (`CAE` → "Container Apps", `ASAv` → "the
    Cisco ASA virtual appliance"). Keep **hex strings, IPs, code, paths, links, and exact values out of
