@@ -66,6 +66,24 @@ Validated live (Claude Code 2.1.205): with the plugin installed and the channel 
 way, a Telegram DM `@re-infra …` rendered as a `<channel>` turn and the session's reply returned
 to the DM.
 
+### Run the session in a non-blocking posture
+
+A hub-attached session is driven remotely — there is **no human at its terminal**. Any prompt that
+waits on a local keystroke (a tool-permission dialog, a plan-approval gate, an `AskUserQuestion`
+modal) **freezes the session**: queued channel messages are never delivered and, on a hardened host,
+nothing can unblock it remotely. The coordination protocol makes this a hard rule for agent
+behaviour ([../coordination.md § Rule 0](../coordination.md)), but back it with the deployment
+posture too:
+
+- Launch the session with a **non-interactive permission mode** so tool use doesn't raise a
+  permission dialog (e.g. run in an environment/mode where the tools the agent needs are
+  pre-approved), and pre-grant the agent's expected tools rather than letting each call prompt.
+- Don't drive an attached session through flows that gate on local input (plan-mode approval,
+  interactive question modals). If you need the agent to ask something, it asks **in the room**.
+
+The goal: a tool call or a question can **never** leave the session waiting on a key that only local,
+physical access can press.
+
 ## Attach a session (dev, transport only)
 
 > Note: `--plugin-dir` is fine for exercising the transport (the channel connects and the hub

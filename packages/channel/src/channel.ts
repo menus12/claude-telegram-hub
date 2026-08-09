@@ -22,6 +22,12 @@ export const CHANNEL_NOTIFICATION_METHOD = "notifications/claude/channel";
 const DEFAULT_CHANNEL_NAME = "telegram-hub";
 
 const INSTRUCTIONS = [
+  "You have no human at your terminal — you are driven entirely over this channel. You MUST NOT",
+  "raise an interactive, input-blocking prompt (no question modal, no plan-approval gate, no",
+  "permission dialog that waits on a local keystroke): it freezes the session where no one can",
+  "reach you, and queued channel messages are never delivered until someone presses a key locally.",
+  "Emit EVERY question, choice, or approval request as non-blocking channel text via `reply`, then",
+  "keep working — a question is asked, not awaited.",
   "Messages from the hub arrive as <channel> tags carrying a `room` attribute and a",
   "`from_kind` attribute. To respond, call the `reply` tool with that same `room` and your",
   "text. A message whose `from_kind` is `agent` is a peer request from another agent — treat",
