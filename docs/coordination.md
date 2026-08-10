@@ -195,9 +195,10 @@ a second channel — the same "match verbosity to the medium" rule (A6) governs 
    `<channel>` tag carries `voice="true"`) — and then do it **by default** for that reply (don't make
    them ask, and don't send text *and then* a separate voice note; one coherent reply). Everything
    else stays **text**: **never** voice an agent↔agent message, and **never** voice proactively or a
-   reply to a text message. *(This assumes the hub's auto-voice is off — the intended posture. If a
-   deployment turns `HUB_TTS_AUTO` on, it voices every speakable reply regardless of your intent,
-   overriding this rule; keep it off so voice stays agent-controlled.)*
+   reply to a text message. *(Deployment note: `HUB_TTS_AUTO=on` overrides your intent and voices
+   every speakable reply — don't use it if this rule matters. `HUB_TTS_AUTO=reply-to-voice` instead
+   **enforces exactly this rule** hub-side, voicing only replies that answer an operator voice note;
+   `off` leaves it fully agent-controlled.)*
 2. **Write for the ear, not the eye.** The spoken text is not your chat text read aloud. Expand or
    respell abbreviations and jargon a listener can't parse (`CAE` → "Container Apps", `ASAv` → "the
    Cisco ASA virtual appliance"). Keep **hex strings, IPs, code, paths, links, and exact values out of

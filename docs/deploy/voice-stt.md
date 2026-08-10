@@ -160,7 +160,7 @@ also exposes an OpenAI-compatible **`/openai/v1/…`** surface that accepts
 | `HUB_TTS_VOICE_MAP` | — | Per-language voices for a bilingual room, `lang:voice,…` (e.g. `en:af_sky,ru:af_ru`). |
 | `HUB_TTS_FORMAT` | `opus` | Response format; keep `opus` for Telegram voice notes. |
 | `HUB_TTS_MAX_CHARS` | `300` | Skip voicing a reply longer than this (posts text). |
-| `HUB_TTS_AUTO` | `off` | Auto-voice every speakable reply without the agent's `voice: true`; `voice: false` opts a reply out. |
+| `HUB_TTS_AUTO` | `off` | Auto-voice mode: `off` \| `on` (every speakable reply) \| `reply-to-voice` (only replies answering an operator voice note). Explicit `voice: true`/`false` always wins. |
 | `HUB_TTS_API_KEY` | — | Cloud TTS key (`Authorization: Bearer …` by default). |
 | `HUB_TTS_AUTH_HEADER` | `Authorization` | Auth header name; `api-key` for Azure OpenAI. |
 
@@ -168,11 +168,16 @@ See [../configuration.md](../configuration.md) for the full surface.
 
 ## Use & verify
 
-- **Hands-free voicing.** Set `HUB_TTS_AUTO=on` to voice every reply that passes the
-  speakability heuristic *without* the agent setting `voice: true` — handy for a room
-  the operator listens to. The same guards apply (code/links/long → text), and an agent
-  can still force text on a specific reply with `voice: false`. Default off; consider it
-  a per-room preference until per-operator control lands ([#70](https://github.com/menus12/claude-telegram-hub/issues/70)).
+- **Hands-free voicing.** `HUB_TTS_AUTO` voices replies without the agent setting `voice: true`:
+  - `on` — voice **every** speakable reply (including the room copies of agent↔agent chatter).
+  - `reply-to-voice` — voice a reply **only when it answers an operator voice note** (mirror the
+    inbound modality); agent↔agent and replies to text stay text. This is the **deterministic,
+    hub-enforced** form of the convention's "voice only replies to an operator voice message" — it
+    doesn't depend on every agent remembering to set `voice: true`, and it's the recommended mode
+    when the operator wants spoken answers to their voice notes without over-voicing the room (#88).
+
+  The speakability/`HUB_TTS_MAX_CHARS` guards apply in every mode, an explicit `voice: true`/`false`
+  always wins, and `/voice off` mutes a room regardless ([#70](https://github.com/menus12/claude-telegram-hub/issues/70)).
 - **Mute a room at runtime.** An admin can run `/voice off` in a room to make replies there
   come as text (and `/voice on` to restore) — a per-room override on top of the deployment's
   TTS/`HUB_TTS_AUTO` setting, persisted in `HUB_STATE_FILE` (#70). More broadly, `/config`,

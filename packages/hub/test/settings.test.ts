@@ -12,9 +12,9 @@ const T = (key: string) => {
 
 describe("tunables registry", () => {
   it("parses and validates each value kind", () => {
-    expect(T("ttsauto").parse("on")).toBe(true);
-    expect(T("ttsauto").parse("off")).toBe(false);
-    expect(() => T("ttsauto").parse("maybe")).toThrow(/on\/off/);
+    expect(T("ttsauto").parse("on")).toBe("on");
+    expect(T("ttsauto").parse("reply-to-voice")).toBe("reply-to-voice");
+    expect(() => T("ttsauto").parse("maybe")).toThrow(/off\|on\|reply-to-voice/);
 
     expect(T("ttsmaxchars").parse("400")).toBe(400);
     expect(() => T("ttsmaxchars").parse("0")).toThrow(/>= 1/);
@@ -47,8 +47,8 @@ describe("SettingsStore", () => {
   it("stores and clears a global override", () => {
     const s = new SettingsStore();
     expect(s.getOverride("ttsAuto")).toBeUndefined();
-    s.set(T("ttsauto"), true);
-    expect(s.getOverride("ttsAuto")).toBe(true);
+    s.set(T("ttsauto"), "on");
+    expect(s.getOverride("ttsAuto")).toBe("on");
     expect(s.unset(T("ttsauto"))).toBe(true);
     expect(s.getOverride("ttsAuto")).toBeUndefined();
     expect(s.unset(T("ttsauto"))).toBe(false); // nothing to clear
