@@ -56,15 +56,18 @@ async function startHub(
 
 function attach(url: string, agent: string) {
   let registered = false;
+  let injected = 0;
   const client = new HubClient(channelConfig(url, agent), {
-    onInbound: () => {},
+    onInbound: () => {
+      injected += 1;
+    },
     onRegistered: () => {
       registered = true;
     },
   });
   clients.push(client);
   client.start();
-  return { client, registered: () => registered };
+  return { client, registered: () => registered, injected: () => injected };
 }
 
 describe("voiced replies (TTS)", () => {
@@ -284,6 +287,82 @@ describe("voiced replies (TTS)", () => {
       await waitFor(() => adapter.sent.some((s) => s.out.text.includes("Voice replies on")));
       a.client.sendReply({ room: "-100", text: "three", voice: true });
       await waitFor(() => adapter.sentVoices.length >= 2);
+    });
+  });
+
+  describe("HUB_TTS_AUTO=reply-to-voice (#88)", () => {
+    const mirror = { HUB_TTS_AUTO: "reply-to-voice", HUB_STT_URL: "http://stt:8000", HUB_VOICE_ECHO: "off" };
+    const operatorVoice = (over = {}): InboundMessage => ({
+      adapter: "loopback",
+      room: "-100",
+      fromKind: "human",
+      fromId: "user1",
+      text: "status?",
+      mentions: ["platform"],
+      voice: true,
+      ...over,
+    });
+
+    it("voices a reply that answers an operator voice note", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth, undefined, mirror);
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      await adapter.deliver(operatorVoice());
+      await waitFor(() => a.injected() >= 1); // the voice note reached the agent
+
+      a.client.sendReply({ room: "-100", text: "all green, deployed" }); // no voice flag
+      await waitFor(() => adapter.sentVoices.length >= 1);
+    });
+
+    it("does NOT voice a reply to an operator TEXT message", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth, undefined, mirror);
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      await adapter.deliver(operatorVoice({ voice: false, text: "@platform status" }));
+      await waitFor(() => a.injected() >= 1);
+
+      a.client.sendReply({ room: "-100", text: "all green" });
+      await waitFor(() => adapter.sent.some((s) => s.out.text === "all green"));
+      expect(adapter.sentVoices).toHaveLength(0);
+    });
+
+    it("does NOT voice an agent↔agent reply (last inbound was a peer)", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth, undefined, mirror);
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+
+      // a peer message is what platform last saw
+      await adapter.deliver({
+        adapter: "loopback",
+        room: "-100",
+        fromKind: "agent",
+        fromId: "gitops",
+        text: "@platform can you check",
+        mentions: ["platform"],
+      });
+      await waitFor(() => a.injected() >= 1);
+
+      a.client.sendReply({ room: "-100", text: "checked, all good" });
+      await waitFor(() => adapter.sent.some((s) => s.out.text === "checked, all good"));
+      expect(adapter.sentVoices).toHaveLength(0);
+    });
+
+    it("an explicit voice:false still forces text even after an operator voice note", async () => {
+      const synth = new FakeSynthesisService();
+      const { adapter, url } = await startHub(synth, undefined, mirror);
+      const a = attach(url, "platform");
+      await waitFor(a.registered);
+      await adapter.deliver(operatorVoice());
+      await waitFor(() => a.injected() >= 1);
+
+      a.client.sendReply({ room: "-100", text: "all green", voice: false });
+      await waitFor(() => adapter.sent.some((s) => s.out.text === "all green"));
+      expect(adapter.sentVoices).toHaveLength(0);
     });
   });
 

@@ -70,6 +70,21 @@ function bool(v: string | undefined): boolean | string | undefined {
   return v;
 }
 
+/**
+ * Coerce the `HUB_TTS_AUTO` mode. Accepts the enum values (`off`/`on`/
+ * `reply-to-voice`) and legacy booleans (`true`→`on`, `false`→`off`, plus
+ * `1/0`,`yes/no`); an unrecognized value passes through so the schema reports it.
+ */
+function ttsAutoMode(v: string | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  const t = v.trim().toLowerCase();
+  if (t === "") return undefined;
+  if (["on", "true", "1", "yes"].includes(t)) return "on";
+  if (["off", "false", "0", "no"].includes(t)) return "off";
+  if (["reply-to-voice", "reply_to_voice", "mirror"].includes(t)) return "reply-to-voice";
+  return v;
+}
+
 function parseOrThrow<S extends z.ZodTypeAny>(
   schema: S,
   input: unknown,
@@ -185,11 +200,17 @@ export const hubConfigSchema = z.object({
   /** Skip voicing a reply whose speakable text exceeds this many characters. */
   ttsMaxChars: z.number().int().positive().default(300),
   /**
-   * Auto-voice eligible replies without the agent setting `voice: true`. When on
-   * (and TTS enabled), any reply that passes the speakability heuristic is voiced;
-   * `voice: false` explicitly opts a reply out. Default off. (#69)
+   * Auto-voice mode for replies without an explicit `voice` (an explicit
+   * `voice: true`/`false` always wins; the speakability + `ttsMaxChars` gates and
+   * `/voice off` still apply):
+   *   - `off` — never auto-voice (the agent must set `voice: true`). (#69)
+   *   - `on` — voice every speakable reply.
+   *   - `reply-to-voice` — voice a reply only when it answers an operator **voice**
+   *     note (mirror the inbound modality); agent↔agent and replies to text stay
+   *     text. Deterministic, not dependent on per-agent discipline. (#88)
+   * Legacy boolean values map: `true`→`on`, `false`→`off`.
    */
-  ttsAuto: z.boolean().default(false),
+  ttsAuto: z.enum(["off", "on", "reply-to-voice"]).default("off"),
   /** Token that marks an agent mention. */
   tagSigil: z.string().min(1).default("@"),
   /** Address the session-facing WS/HTTP server binds to. */
@@ -288,7 +309,7 @@ export function loadHubConfig(env: Env): HubConfig {
       ttsVoiceMap: kvmap(env[HUB_ENV.ttsVoiceMap]),
       ttsFormat: env[HUB_ENV.ttsFormat],
       ttsMaxChars: num(env[HUB_ENV.ttsMaxChars]),
-      ttsAuto: bool(env[HUB_ENV.ttsAuto]),
+      ttsAuto: ttsAutoMode(env[HUB_ENV.ttsAuto]),
       ttsApiKey: env[HUB_ENV.ttsApiKey],
       ttsAuthHeader: env[HUB_ENV.ttsAuthHeader],
       tagSigil: env[HUB_ENV.tagSigil],

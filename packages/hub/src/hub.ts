@@ -72,6 +72,9 @@ export class Hub {
   // their entry points are gated on the effective `presence`/`sla` setting.
   private readonly presence: PresenceTracker;
   private readonly sla: ResponseSla;
+  // The most recent inbound the hub injected into each agent, so `ttsAuto:
+  // reply-to-voice` can tell whether a reply answers an operator voice note (#88).
+  private readonly lastInboundTo = new Map<string, { room: string; human: boolean; voice: boolean }>();
   private started = false;
 
   constructor(private readonly deps: HubDeps) {
@@ -137,6 +140,23 @@ export class Hub {
   private effective<K extends keyof HubConfig>(field: K, room?: string): HubConfig[K] {
     const override = this.settings.getOverride(field, room);
     return (override ?? this.deps.config[field]) as HubConfig[K];
+  }
+
+  /**
+   * Whether to auto-voice a reply that didn't set `voice` explicitly, per the
+   * effective `ttsAuto` mode: `on` voices any speakable reply; `reply-to-voice`
+   * voices only when this agent's most recent injected inbound was an operator
+   * **voice** note in this room — so agent↔agent and replies to text stay text
+   * (#88); `off` never auto-voices.
+   */
+  private autoVoice(agent: string, room: string): boolean {
+    const mode = this.effective("ttsAuto");
+    if (mode === "on") return true;
+    if (mode === "reply-to-voice") {
+      const last = this.lastInboundTo.get(agent);
+      return !!last && last.room === room && last.human && last.voice;
+    }
+    return false;
   }
 
   async start(): Promise<void> {
@@ -507,10 +527,10 @@ export class Hub {
    * synthesis fails, or the audio isn't a voice-note format.
    */
   private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
-    // `voice: true`/`false` is an explicit choice; when unset, auto mode decides.
+    // `voice: true`/`false` is an explicit choice; when unset, the auto mode decides.
     // A room where an operator ran `/voice off` gets text regardless (#70).
     const wantsVoice =
-      (reply.voice ?? this.effective("ttsAuto")) && !this.access.isRoomVoiceOff(reply.room);
+      (reply.voice ?? this.autoVoice(agent, reply.room)) && !this.access.isRoomVoiceOff(reply.room);
     if (wantsVoice && this.synth) {
       // Speak `voiceText` when the agent gave a distinct spoken form; otherwise a
       // sanitized `text`. Either way `text` stays the caption / source of truth (#68).
@@ -700,6 +720,12 @@ export class Hub {
         continue;
       }
       session.send({ type: "inbound", message, ...(file ? { file } : {}) });
+      // Remember what this agent last saw, for reply-to-voice auto-voicing (#88).
+      this.lastInboundTo.set(agent, {
+        room: message.room,
+        human: message.fromKind === "human",
+        voice: message.voice === true,
+      });
       this.deps.logger("debug", "injected inbound", {
         agent,
         room: message.room,
