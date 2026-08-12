@@ -1,12 +1,14 @@
-export { loadChannelConfig, type LoadOptions } from "./config.js";
+export { loadChannelConfig, loadChannelConfigs, type LoadOptions } from "./config.js";
 export {
   buildChannel,
+  buildInstructions,
   buildInboundNotification,
   parseReplyArgs,
   parseSendFileArgs,
   CHANNEL_NOTIFICATION_METHOD,
   type Channel,
   type BuildChannelDeps,
+  type ReplyArgs,
   type SendFileArgs,
 } from "./channel.js";
 export {

@@ -117,6 +117,39 @@ root:
 Environment variables still override it. **Never commit secrets** — `.telegram-hub.json` is
 gitignored by this repo's `.gitignore`.
 
+## Attach one session to several hubs (multi-hub)
+
+A single session can attach to **multiple hubs at once** — e.g. a vendor/maintainer agent that
+sits in several project rooms and is `@`-taggable in each. Instead of one hub, give it a `hubs`
+array (in `.telegram-hub.json` or `~/.config/claude-telegram-hub/config.json`):
+
+```json
+{
+  "hubs": [
+    { "label": "learn",     "hubUrl": "wss://…learn…",     "sessionSecret": "…", "agent": "hub" },
+    { "label": "re",        "hubUrl": "wss://…re…",        "sessionSecret": "…", "agent": "hub" },
+    { "label": "cheburnet", "hubUrl": "wss://…cheburnet…", "sessionSecret": "…", "agent": "hub" },
+    { "label": "conn",      "hubUrl": "wss://…conn…",      "sessionSecret": "…", "agent": "hub" }
+  ]
+}
+```
+
+- Each **`label`** is a short, unique namespace (use the project name). It's stamped on that hub's
+  messages as a `hub` attribute and is how the session routes a reply back.
+- The session registers as `agent` on each hub (here `@hub` on all four; set a different name per
+  entry if a project already uses that name).
+- **Namespacing:** every `<channel>` tag carries `hub="learn"`; agent-origin messages read
+  `From learn/kb: …`, so `learn/kb` and `cheburnet/kb` never conflate. `@mentions` are always names
+  **on the reply's hub**.
+- **Replying:** pass `hub` on `reply`/`send_file` (required in multi-hub); it can be omitted for a
+  plain reply into a room you just received from (routed by the room). To involve an agent on
+  another hub, send a **separate** reply with that hub — hubs don't route to each other.
+- **Back-compatible:** a plain single-hub config (the `hubUrl`/`sessionSecret`/`agent` form above)
+  is unchanged — no `hub` field on the tools, no `hub` attribute on messages.
+
+Secrets: the file holds one session secret **per hub** — keep it gitignored / inject from your
+secret store, never commit it.
+
 ## Notes
 
 - The channel talks only to the hub, never to Telegram; it holds one persistent WebSocket and

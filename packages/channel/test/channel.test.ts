@@ -11,7 +11,7 @@ import {
   parseSendFileArgs,
 } from "../src/index.js";
 import type { HubClientEvents, ReplyInput, SendFileInput } from "../src/index.js";
-import type { ChannelConfig, FilePayload, InboundFrame } from "@claude-telegram-hub/protocol";
+import type { ChannelConfig, FilePayload, InboundFrame, LabeledChannelConfig } from "@claude-telegram-hub/protocol";
 
 function cfg(): ChannelConfig {
   return {
@@ -23,6 +23,11 @@ function cfg(): ChannelConfig {
     reconnectMaxMs: 100,
     maxFileMb: 50,
   };
+}
+
+/** A single-hub list for buildChannel (label defaults to the agent name). */
+function hubList(): LabeledChannelConfig[] {
+  return [{ ...cfg(), label: "a" }];
 }
 
 function humanFrame(text: string, mentions: string[] = []): InboundFrame {
@@ -110,7 +115,7 @@ describe("buildInboundNotification", () => {
   });
 
   it("surfaces an attachment path in meta and inline in the content", () => {
-    const note = buildInboundNotification(fileFrame("look"), "/tmp/x/rufus.ini");
+    const note = buildInboundNotification(fileFrame("look"), { attachmentPath: "/tmp/x/rufus.ini" });
     expect(note.params.meta.attachment_path).toBe("/tmp/x/rufus.ini");
     expect(note.params.meta.attachment_name).toBe("rufus.ini");
     expect(note.params.content).toContain("look");
@@ -125,7 +130,7 @@ describe("buildInboundNotification", () => {
   });
 
   it("does not add attachment meta to a fileless message", () => {
-    const note = buildInboundNotification(humanFrame("hi"), "/tmp/x/shot.png");
+    const note = buildInboundNotification(humanFrame("hi"), { attachmentPath: "/tmp/x/shot.png" });
     expect(note.params.meta.attachment_path).toBeUndefined();
     expect(note.params.meta.attachment_name).toBeUndefined();
   });
@@ -192,9 +197,9 @@ describe("MCP wiring (in-memory)", () => {
   it("exposes a reply tool that forwards to the hub, and injects hub inbound", async () => {
     const sent: ReplyInput[] = [];
     let events: HubClientEvents | undefined;
-    const channel = buildChannel(cfg(), {
+    const channel = buildChannel(hubList(), {
       logger: () => {},
-      createHub: (evts) => {
+      createHub: (_cfg, evts) => {
         events = evts;
         return {
           start() {},
@@ -237,7 +242,7 @@ describe("MCP wiring (in-memory)", () => {
 
   it("tells the sending agent whether a voice:true reply went out as voice or fell back (#74)", async () => {
     const caps = { enabled: true, maxChars: 300 };
-    const channel = buildChannel(cfg(), {
+    const channel = buildChannel(hubList(), {
       logger: () => {},
       createHub: () => ({
         start() {},
@@ -283,7 +288,7 @@ describe("MCP wiring (in-memory)", () => {
 
   it("exposes a send_file tool that reads a local file and forwards bytes to the hub", async () => {
     const files: SendFileInput[] = [];
-    const channel = buildChannel(cfg(), {
+    const channel = buildChannel(hubList(), {
       logger: () => {},
       createHub: () => ({
         start() {},
@@ -327,9 +332,9 @@ describe("MCP wiring (in-memory)", () => {
 
   it("materializes an inbound file to a local path and injects that path (end to end)", async () => {
     let events: HubClientEvents | undefined;
-    const channel = buildChannel(cfg(), {
+    const channel = buildChannel(hubList(), {
       logger: () => {},
-      createHub: (evts) => {
+      createHub: (_cfg, evts) => {
         events = evts;
         return { start() {}, stop() {}, sendReply() {}, sendFile() {}, voiceReplyCaps: () => undefined };
       },
@@ -353,6 +358,75 @@ describe("MCP wiring (in-memory)", () => {
       await rm(savedPath, { force: true });
     }
 
+    await channel.mcp.close();
+  });
+});
+
+describe("multi-hub wiring (#90)", () => {
+  function twoHubs(): LabeledChannelConfig[] {
+    return [
+      { ...cfg(), label: "learn", hubUrl: "ws://learn:8787", agent: "hub" },
+      { ...cfg(), label: "cheburnet", hubUrl: "ws://cheb:8787", agent: "hub" },
+    ];
+  }
+  const agentFrame = (fromId: string, text: string, room: string): InboundFrame => ({
+    type: "inbound",
+    message: { adapter: "telegram", room, fromKind: "agent", fromId, text, mentions: [] },
+  });
+
+  it("namespaces messages by hub and routes replies to the right hub", async () => {
+    const sent = new Map<string, ReplyInput[]>();
+    const eventsByLabel = new Map<string, HubClientEvents>();
+    const channel = buildChannel(twoHubs(), {
+      logger: () => {},
+      createHub: (c, evts) => {
+        sent.set(c.label, []);
+        eventsByLabel.set(c.label, evts);
+        return {
+          start() {},
+          stop() {},
+          sendReply: (r) => void sent.get(c.label)!.push(r),
+          sendFile() {},
+          voiceReplyCaps: () => undefined,
+        };
+      },
+    });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await channel.mcp.connect(st);
+    const client = new Client({ name: "t", version: "0.0.0" }, { capabilities: {} });
+    await client.connect(ct);
+
+    // the reply tool exposes a `hub` field in multi-hub mode
+    const tools = await client.listTools();
+    const reply = tools.tools.find((t) => t.name === "reply")!;
+    expect(Object.keys(reply.inputSchema.properties as Record<string, unknown>)).toContain("hub");
+
+    // an inbound on learn injects with hub="learn" and a qualified sender
+    const noteSpy = vi.spyOn(channel.mcp, "notification").mockResolvedValue(undefined);
+    eventsByLabel.get("learn")!.onInbound(agentFrame("kb", "ping", "-100"));
+    expect(noteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({
+          content: "From learn/kb: ping",
+          meta: expect.objectContaining({ hub: "learn" }),
+        }),
+      }),
+    );
+
+    // explicit hub routes there
+    await client.callTool({ name: "reply", arguments: { hub: "cheburnet", room: "-200", text: "hi" } });
+    expect(sent.get("cheburnet")).toHaveLength(1);
+    expect(sent.get("learn")).toHaveLength(0);
+
+    // no hub, but the room was last seen on learn → inferred
+    await client.callTool({ name: "reply", arguments: { room: "-100", text: "ack" } });
+    expect(sent.get("learn")).toHaveLength(1);
+
+    // unknown hub → error text, nothing routed
+    const res = await client.callTool({ name: "reply", arguments: { hub: "nope", room: "-1", text: "x" } });
+    expect((res.content as { text: string }[])[0].text).toContain("unknown hub");
+
+    await client.close();
     await channel.mcp.close();
   });
 });
