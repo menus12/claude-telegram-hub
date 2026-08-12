@@ -35,6 +35,9 @@ const BASE_INSTRUCTIONS = [
   "reach you, and queued channel messages are never delivered until someone presses a key locally.",
   "Emit EVERY question, choice, or approval request as non-blocking channel text via `reply`, then",
   "keep working — a question is asked, not awaited.",
+  "A message may open with a quoted block (`↩ In reply to …: \"…\"`) and a `reply_to_from` attribute —",
+  "that's the operator pointing you at a specific earlier message as the context for their request.",
+  "Treat the quote as given context (no need to ask them to restate it) and answer the new request.",
   "An inbound file is saved locally and its path given in the `attachment_path` attribute —",
   "open it with your normal file tools. To send a file out, call `send_file` with the `room`",
   "and a local `path` (plus an optional `caption`).",
@@ -87,6 +90,15 @@ export function buildInboundNotification(
     adapter: m.adapter,
   };
   if (hub) meta.hub = hub;
+  if (m.replyTo) {
+    // Quoted context the operator pointed you at (a reply-to). Prepend it so the
+    // agent catches up without a restatement; expose the author in meta too.
+    const who = m.replyTo.author
+      ? (hub ? `${hub}/${m.replyTo.author}` : m.replyTo.author)
+      : "an earlier message";
+    if (m.replyTo.author) meta.reply_to_from = m.replyTo.author;
+    content = `↩ In reply to ${who}: "${m.replyTo.text}"\n\n${content}`;
+  }
   if (m.mentions.length > 0) meta.mentions = m.mentions.join(",");
   if (frame.coordinationThread) meta.thread = frame.coordinationThread;
   if (m.voice) meta.voice = "true"; // this arrived as a voice note (you may reply in kind)

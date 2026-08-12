@@ -134,6 +134,44 @@ describe("buildInboundNotification", () => {
     expect(note.params.meta.attachment_path).toBeUndefined();
     expect(note.params.meta.attachment_name).toBeUndefined();
   });
+
+  it("prepends reply-to context and exposes the author in meta (#92)", () => {
+    const frame: InboundFrame = {
+      type: "inbound",
+      message: {
+        adapter: "telegram",
+        room: "-100",
+        fromKind: "human",
+        fromId: "42",
+        text: "investigate this",
+        mentions: ["hub"],
+        replyTo: { author: "kb", text: "the STT shim 502s on long notes" },
+      },
+    };
+    const note = buildInboundNotification(frame);
+    expect(note.params.meta.reply_to_from).toBe("kb");
+    expect(note.params.content).toBe(
+      '↩ In reply to kb: "the STT shim 502s on long notes"\n\ninvestigate this',
+    );
+  });
+
+  it("qualifies the quoted author by hub in multi-hub mode (#92)", () => {
+    const frame: InboundFrame = {
+      type: "inbound",
+      message: {
+        adapter: "telegram",
+        room: "-100",
+        fromKind: "human",
+        fromId: "42",
+        text: "look",
+        mentions: ["hub"],
+        replyTo: { author: "kb", text: "boom" },
+      },
+    };
+    const note = buildInboundNotification(frame, { hub: "learn" });
+    expect(note.params.meta.hub).toBe("learn");
+    expect(note.params.content).toContain("↩ In reply to learn/kb:");
+  });
 });
 
 describe("parseSendFileArgs", () => {

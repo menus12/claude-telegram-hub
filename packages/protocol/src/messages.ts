@@ -46,6 +46,16 @@ export const inboundMessageSchema = z.object({
    * a transcript echo so the operator can catch a mis-hear.
    */
   voice: z.boolean().optional(),
+  /**
+   * Quoted context from a reply-to: when the operator replies to an earlier message
+   * while tagging an agent, the tagged agent gets that message as context (so a
+   * just-in-time peer catches up without the operator re-stating it). `author` is
+   * the quoted message's agent when known; `text` is its body (attribution prefix
+   * stripped). Selective by design — only the tagged recipients receive it.
+   */
+  replyTo: z
+    .object({ author: z.string().min(1).optional(), text: z.string().min(1) })
+    .optional(),
 });
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 

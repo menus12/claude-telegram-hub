@@ -1,6 +1,21 @@
-import type { InboundMessage } from "@claude-telegram-hub/protocol";
+import { ATTRIBUTION_SEPARATOR, type InboundMessage } from "@claude-telegram-hub/protocol";
 import { parseMentions } from "./mentions.js";
 import type { TgMessage } from "./types.js";
+
+/** Longest quoted body we thread as context; a pathological quote is truncated. */
+const MAX_QUOTE_CHARS = 1500;
+
+/** Split a replied-to message into its attribution author (if any) and body text. */
+function splitQuoted(text: string): { author?: string; body: string } {
+  const idx = text.indexOf(ATTRIBUTION_SEPARATOR);
+  if (idx > 0 && idx <= 40) {
+    const name = text.slice(0, idx);
+    if (/^[A-Za-z0-9_-]+$/.test(name)) {
+      return { author: name, body: text.slice(idx + ATTRIBUTION_SEPARATOR.length) };
+    }
+  }
+  return { body: text };
+}
 
 /** The replied-to message, as much as routing needs to identify its author. */
 export interface ReplyContext {
@@ -26,9 +41,10 @@ export type ReplyTargetResolver = (reply: ReplyContext) => string | undefined;
  * internally). A photo/document is routed by its caption; `attachments` names it
  * (the bytes travel separately, fetched by the adapter).
  *
- * A Telegram reply to an agent's message is treated as addressing that agent:
- * `resolveReplyTarget` maps the replied-to message back to its agent, which is
- * added to `mentions` so hub routing is unchanged. Reply-to and `@tags` compose.
+ * A Telegram reply carries selective context: with **no** `@tag` it addresses the
+ * replied-to agent (continue the thread); **with** an `@tag` the tag wins as the
+ * recipient and the replied-to message rides along as `replyTo` context, so the
+ * operator can pull a just-in-time peer into a thread without re-stating it.
  */
 export function toInboundMessage(
   msg: TgMessage,
@@ -41,13 +57,28 @@ export function toInboundMessage(
   const room = String(msg.chat.id);
   const mentions = parseMentions(text, sigil);
   const repliedTo = msg.reply_to_message;
+  let replyTo: { author?: string; text: string } | undefined;
   if (repliedTo && resolveReplyTarget) {
-    const agent = resolveReplyTarget({
+    const author = resolveReplyTarget({
       room,
       messageId: repliedTo.message_id,
       ...(repliedTo.text !== undefined ? { text: repliedTo.text } : {}),
     });
-    if (agent && !mentions.includes(agent)) mentions.push(agent);
+    if (mentions.length > 0) {
+      // Explicit @mentions win as the recipients; the reply-to is CONTEXT — thread
+      // the quoted message to whoever was tagged so a just-in-time peer catches up
+      // without the operator re-stating it. (The reply-to author is NOT re-pinged.)
+      if (repliedTo.text) {
+        const { author: fromPrefix, body } = splitQuoted(repliedTo.text);
+        const trimmed = body.length > MAX_QUOTE_CHARS ? `${body.slice(0, MAX_QUOTE_CHARS)}…` : body;
+        const quotedAuthor = author ?? fromPrefix;
+        if (trimmed.trim()) replyTo = { ...(quotedAuthor ? { author: quotedAuthor } : {}), text: trimmed };
+      }
+    } else if (author) {
+      // No explicit tag: the reply-to addresses that agent (continue the thread).
+      // No quote — it's the agent's own prior message, so it already has the context.
+      mentions.push(author);
+    }
   }
   return {
     adapter: "telegram",
@@ -57,5 +88,6 @@ export function toInboundMessage(
     text,
     mentions,
     ...(msg.attachment ? { attachments: [msg.attachment.filename] } : {}),
+    ...(replyTo ? { replyTo } : {}),
   };
 }

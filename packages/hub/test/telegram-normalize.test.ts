@@ -101,24 +101,50 @@ describe("toInboundMessage", () => {
     expect(m?.mentions).toEqual([]);
   });
 
-  it("composes a reply target with an explicit @tag, de-duplicating", () => {
+  it("an explicit @tag wins as recipient; the reply-to rides along as context (#92)", () => {
+    // reply to re-infra's message, tag @re-gitops → gitops is the recipient, and
+    // re-infra's quoted message is threaded as context (re-infra is NOT re-pinged).
     const reply: TgMessage = {
       ...base,
-      text: "@re-gitops and you", // explicit tag
-      reply_to_message: { message_id: 7 },
+      text: "@re-gitops take a look",
+      reply_to_message: { message_id: 7, text: "re-infra ▸ all green on egress" },
     };
-    const m = toInboundMessage(reply, "@", () => "re-infra"); // reply target
-    expect(m?.mentions).toEqual(["re-gitops", "re-infra"]);
+    const m = toInboundMessage(reply, "@", () => "re-infra");
+    expect(m?.mentions).toEqual(["re-gitops"]);
+    expect(m?.replyTo).toEqual({ author: "re-infra", text: "all green on egress" });
   });
 
-  it("does not double-add when the reply target is already @tagged", () => {
+  it("attaches its own quote when the reply target is explicitly @tagged (#92)", () => {
     const reply: TgMessage = {
       ...base,
       text: "@re-infra ping",
-      reply_to_message: { message_id: 7 },
+      reply_to_message: { message_id: 7, text: "re-infra ▸ deployed" },
     };
     const m = toInboundMessage(reply, "@", () => "re-infra");
     expect(m?.mentions).toEqual(["re-infra"]);
+    expect(m?.replyTo).toEqual({ author: "re-infra", text: "deployed" });
+  });
+
+  it("a reply with no @tag continues the thread with the target, no quote (#92)", () => {
+    const reply: TgMessage = {
+      ...base,
+      text: "and the db?",
+      reply_to_message: { message_id: 7, text: "re-infra ▸ all green" },
+    };
+    const m = toInboundMessage(reply, "@", () => "re-infra");
+    expect(m?.mentions).toEqual(["re-infra"]); // reply-to addresses re-infra
+    expect(m?.replyTo).toBeUndefined(); // redundant — it's re-infra's own prior message
+  });
+
+  it("quotes an operator/unattributed reply-to when a peer is tagged (#92)", () => {
+    const reply: TgMessage = {
+      ...base,
+      text: "@re-infra this broke",
+      reply_to_message: { message_id: 7, text: "the egress IP changed overnight" }, // no attribution
+    };
+    const m = toInboundMessage(reply, "@", () => undefined);
+    expect(m?.mentions).toEqual(["re-infra"]);
+    expect(m?.replyTo).toEqual({ text: "the egress IP changed overnight" });
   });
 
   it("ignores a reply whose target isn't a known agent message", () => {
