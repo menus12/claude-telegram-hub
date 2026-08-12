@@ -422,3 +422,22 @@ export function resolveChannelConfig(
     "channel",
   );
 }
+
+// ── multi-hub (one session attached to several hubs) ──────────────────────────
+
+/**
+ * One hub in a multi-hub channel config. `label` is the short, unique namespace
+ * (e.g. a project name) the channel stamps on that hub's messages and routes
+ * replies by, so a session in several rooms can tell `learn/kb` from
+ * `cheburnet/kb`. `hubUrl`/`sessionSecret`/`agent` are that hub's connection.
+ */
+export const hubEntrySchema = z.object({
+  label: z.string().min(1),
+  hubUrl: z.string().url(),
+  sessionSecret: z.string().min(1),
+  agent: z.string().min(1),
+});
+export type HubEntry = z.infer<typeof hubEntrySchema>;
+
+/** A resolved per-hub connection config plus its routing label. */
+export type LabeledChannelConfig = ChannelConfig & { label: string };

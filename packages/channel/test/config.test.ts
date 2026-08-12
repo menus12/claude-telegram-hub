@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { loadChannelConfig } from "../src/index.js";
+import { loadChannelConfig, loadChannelConfigs } from "../src/index.js";
 
 let dir: string;
 
@@ -73,5 +73,43 @@ describe("loadChannelConfig", () => {
     expect(cfg.reconnectInitialMs).toBe(500);
     expect(cfg.reconnectMaxMs).toBe(15000);
     expect(cfg.logLevel).toBe("info");
+  });
+});
+
+describe("loadChannelConfigs (multi-hub, #90)", () => {
+  it("wraps a single-hub config as a 1-element list (label = agent)", () => {
+    writeRepoFile({ hubUrl: "ws://h:8787", sessionSecret: "s", agent: "kb" });
+    const hubs = loadChannelConfigs({ env: { HOME: dir }, cwd: dir });
+    expect(hubs).toHaveLength(1);
+    expect(hubs[0]).toMatchObject({ label: "kb", hubUrl: "ws://h:8787", agent: "kb" });
+  });
+
+  it("resolves a `hubs` array into N labeled connections, sharing top-level fields", () => {
+    writeRepoFile({
+      logLevel: "warn",
+      hubs: [
+        { label: "learn", hubUrl: "ws://learn:8787", sessionSecret: "s1", agent: "hub" },
+        { label: "cheburnet", hubUrl: "ws://cheb:8787", sessionSecret: "s2", agent: "hub" },
+      ],
+    });
+    const hubs = loadChannelConfigs({ env: { HOME: dir }, cwd: dir });
+    expect(hubs.map((h) => h.label)).toEqual(["learn", "cheburnet"]);
+    expect(hubs[0]).toMatchObject({ hubUrl: "ws://learn:8787", sessionSecret: "s1", agent: "hub" });
+    expect(hubs[1].hubUrl).toBe("ws://cheb:8787");
+    expect(hubs[0].logLevel).toBe("warn"); // shared top-level field applied to each
+    expect(hubs[0].reconnectInitialMs).toBe(500); // defaults still apply
+  });
+
+  it("rejects duplicate labels and invalid entries", () => {
+    writeRepoFile({
+      hubs: [
+        { label: "x", hubUrl: "ws://a:8787", sessionSecret: "s", agent: "hub" },
+        { label: "x", hubUrl: "ws://b:8787", sessionSecret: "s", agent: "hub" },
+      ],
+    });
+    expect(() => loadChannelConfigs({ env: { HOME: dir }, cwd: dir })).toThrow(/duplicate hub label/);
+
+    writeRepoFile({ hubs: [{ label: "y", hubUrl: "not-a-url", sessionSecret: "s", agent: "hub" }] });
+    expect(() => loadChannelConfigs({ env: { HOME: dir }, cwd: dir })).toThrow(/hubs\[0\]/);
   });
 });

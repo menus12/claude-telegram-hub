@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { buildChannel } from "./channel.js";
-import { loadChannelConfig } from "./config.js";
+import { loadChannelConfigs } from "./config.js";
 import { makeLogger } from "./logger.js";
 
 /**
@@ -9,17 +9,17 @@ import { makeLogger } from "./logger.js";
  * session's lifetime. All diagnostics go to stderr; stdout is the MCP transport.
  */
 async function main(): Promise<void> {
-  let cfg;
+  let hubs;
   try {
-    cfg = loadChannelConfig();
+    hubs = loadChannelConfigs();
   } catch (err) {
     process.stderr.write(`${(err as Error).message}\n`);
     process.exitCode = 1;
     return;
   }
 
-  const log = makeLogger(cfg.logLevel);
-  const channel = buildChannel(cfg, { logger: log });
+  const log = makeLogger(hubs[0].logLevel);
+  const channel = buildChannel(hubs, { logger: log });
 
   const shutdown = (): void => {
     void channel.stop().finally(() => process.exit(0));
