@@ -393,6 +393,19 @@ describe("voiced replies (TTS)", () => {
     await waitFor(() => adapter.sentVoices.length >= 1);
   });
 
+  it("@operator sets a Telegram mention of the admins and isn't routed as a peer (#94)", async () => {
+    const { adapter, url } = await startHub(); // loopback, HUB_ALLOWLIST=user1 → admins=[user1]
+    const a = attach(url, "platform");
+    await waitFor(a.registered);
+
+    a.client.sendReply({ room: "-100", text: "blocked, need your call", mentions: ["operator"] });
+    await waitFor(() => adapter.sent.length >= 1);
+    expect(adapter.sent[0].out.mentionUserIds).toEqual(["user1"]); // operator = admins
+    await delay(20);
+    // exactly the visible copy — "operator" is not a peer, so no re-inject / offline notice
+    expect(adapter.sent).toHaveLength(1);
+  });
+
   it("a normal reply (no voice) is still text", async () => {
     const synth = new FakeSynthesisService();
     const { adapter, url } = await startHub(synth);

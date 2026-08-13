@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   inboundMessageSchema,
   isBroadcastMention,
+  isOperatorMention,
   outboundMessageSchema,
   routeTargetSchema,
 } from "../src/index.js";
@@ -13,6 +14,16 @@ describe("isBroadcastMention", () => {
     expect(isBroadcastMention("TEAM")).toBe(true);
     expect(isBroadcastMention("re-infra")).toBe(false);
     expect(isBroadcastMention("allies")).toBe(false);
+  });
+});
+
+describe("isOperatorMention (#94)", () => {
+  it("recognizes the reserved operator aliases, case-insensitively", () => {
+    expect(isOperatorMention("operator")).toBe(true);
+    expect(isOperatorMention("Operator")).toBe(true);
+    expect(isOperatorMention("op")).toBe(true);
+    expect(isOperatorMention("operators")).toBe(false);
+    expect(isOperatorMention("infra")).toBe(false);
   });
 });
 

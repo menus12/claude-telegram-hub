@@ -58,6 +58,8 @@ export class TelegramAdapter implements TransportAdapter {
   readonly name = "telegram";
   private inbox: Inbox | undefined;
   private readonly replies: ReplyIndex;
+  /** Last human message id per room — the target for an `@operator` mute-breaking reply (#94). */
+  private readonly lastHumanMsg = new Map<string, number>();
 
   constructor(private readonly opts: TelegramAdapterOptions) {
     this.replies = opts.replyIndex ?? new ReplyIndex();
@@ -69,14 +71,32 @@ export class TelegramAdapter implements TransportAdapter {
     await this.opts.api.start();
   }
 
+  /**
+   * When a reply addresses `@operator` (#94), render each operator as a real
+   * MarkdownV2 mention link (`tg://user?id=…` — a visible `@` badge, no username
+   * needed) and, unless the reply already targets a specific message, reply to the
+   * operator's last message so it notifies even in a muted chat.
+   */
+  private operatorMention(
+    room: string,
+    ids: string[] | undefined,
+    explicitReplyTo: string | undefined,
+  ): { md: string; replyToId?: number } {
+    if (!ids || ids.length === 0) return { md: "" };
+    const md = ` ${ids.map((id) => `[👤 operator](tg://user?id=${id})`).join(" ")}`;
+    const replyToId = explicitReplyTo ? undefined : this.lastHumanMsg.get(room);
+    return { md, ...(replyToId !== undefined ? { replyToId } : {}) };
+  }
+
   async send(target: RouteTarget, out: OutboundMessage): Promise<void> {
-    const base: SendOptions = target.replyToId
-      ? { replyToMessageId: Number(target.replyToId) }
-      : {};
+    const mention = this.operatorMention(target.room, out.mentionUserIds, target.replyToId);
+    const replyToId = target.replyToId ? Number(target.replyToId) : mention.replyToId;
+    const base: SendOptions = replyToId !== undefined ? { replyToMessageId: replyToId } : {};
     let sentId: number | undefined;
     try {
-      // Render agent markdown as Telegram MarkdownV2 so bold/code/lists/links show.
-      sentId = await this.opts.api.sendMessage(target.room, toTelegramMarkdown(out), {
+      // Render agent markdown as Telegram MarkdownV2 so bold/code/lists/links show,
+      // plus the operator mention link (if any).
+      sentId = await this.opts.api.sendMessage(target.room, toTelegramMarkdown(out) + mention.md, {
         ...base,
         parseMode: "MarkdownV2",
       });
@@ -118,9 +138,14 @@ export class TelegramAdapter implements TransportAdapter {
   async sendVoice(target: RouteTarget, out: OutboundVoice): Promise<void> {
     // The caption is the attributed full reply text (the source of truth); the audio
     // is the spoken (sanitized) rendering. Sent plain (short replies, no markup).
+    // For an `@operator` voice reply, reply to the operator's last message so it
+    // breaks a muted chat (#94); the visible badge is text-only, so voice relies on
+    // the reply for the mute-break.
+    const opReplyTo = out.mentionUserIds?.length ? this.lastHumanMsg.get(target.room) : undefined;
+    const replyToId = target.replyToId ? Number(target.replyToId) : opReplyTo;
     const opts: SendFileOptions = {
       caption: `${attributionPrefix(out.agent)}${out.text}`,
-      ...(target.replyToId ? { replyToMessageId: Number(target.replyToId) } : {}),
+      ...(replyToId !== undefined ? { replyToMessageId: replyToId } : {}),
     };
     const sentId = await this.opts.api.sendVoice(
       target.room,
@@ -146,6 +171,9 @@ export class TelegramAdapter implements TransportAdapter {
   }
 
   private handle(msg: TgMessage): void {
+    // Remember the last human message per room, so an `@operator` reply can target
+    // it (a reply notifies even in a muted chat) (#94).
+    if (msg.from && !msg.from.is_bot) this.lastHumanMsg.set(String(msg.chat.id), msg.message_id);
     if (msg.voice) {
       void this.handleVoice(msg).catch((err: unknown) => {
         this.opts.logger?.("warn", "failed to handle voice note", { error: String(err) });
