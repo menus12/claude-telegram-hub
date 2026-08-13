@@ -8,7 +8,7 @@ import {
   voiceUnaddressedNotice,
   voiceUnclearNotice,
 } from "@claude-telegram-hub/protocol";
-import { isBroadcastMention, speakableText } from "@claude-telegram-hub/protocol";
+import { isBroadcastMention, isOperatorMention, speakableText } from "@claude-telegram-hub/protocol";
 import { resolveSpokenRecipients } from "./voice-routing.js";
 import { pickVoice } from "./voice-lang.js";
 import type {
@@ -216,7 +216,8 @@ export class Hub {
     void this.deps.adapter
       .send(
         { adapter: this.deps.adapter.name, room: ask.room },
-        slaEscalationNotice(ask.from, ask.to, minutes),
+        // Mention the operator so the escalation breaks through a muted chat (#94).
+        { ...slaEscalationNotice(ask.from, ask.to, minutes), mentionUserIds: this.access.adminIds() },
       )
       .catch((err: unknown) => {
         this.deps.logger("warn", "sla escalation send failed", { error: String(err) });
@@ -527,6 +528,10 @@ export class Hub {
    * synthesis fails, or the audio isn't a voice-note format.
    */
   private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
+    // An `@operator` in the reply asks the hub to mention the human — render a real
+    // Telegram mention of the admins so it reaches them even in a muted chat (#94).
+    const mentionUserIds = reply.mentions.some(isOperatorMention) ? this.access.adminIds() : undefined;
+    const withMention = mentionUserIds ? { mentionUserIds } : {};
     // `voice: true`/`false` is an explicit choice; when unset, the auto mode decides.
     // A room where an operator ran `/voice off` gets text regardless (#70).
     const wantsVoice =
@@ -551,7 +556,7 @@ export class Hub {
             voice ? { voice } : {},
           );
           if (mimeType === "audio/ogg") {
-            await this.deps.adapter.sendVoice(target, { agent, audio, mimeType, text: reply.text });
+            await this.deps.adapter.sendVoice(target, { agent, audio, mimeType, text: reply.text, ...withMention });
             return;
           }
           this.deps.logger("warn", "tts audio isn't a voice-note format; posting text", { mimeType });
@@ -572,7 +577,7 @@ export class Hub {
     } else if (reply.voice === true && !this.synth) {
       this.deps.logger("info", "voiced reply requested but TTS is disabled; posting text", { agent });
     }
-    await this.deps.adapter.send(target, { agent, text: reply.text, kind: "reply" });
+    await this.deps.adapter.send(target, { agent, text: reply.text, kind: "reply", ...withMention });
   }
 
   /** Whether the mention set carries an enabled broadcast token (`@all`, …). */
@@ -661,7 +666,9 @@ export class Hub {
     const mentions = this.effective("broadcast")
       ? reply.mentions.filter((m) => !isBroadcastMention(m))
       : reply.mentions;
-    const peers = mentions.filter((m) => m !== agent);
+    // `operator` addresses the human (rendered as a mention in the visible copy),
+    // not a peer agent — keep it out of agent re-injection (#94).
+    const peers = mentions.filter((m) => m !== agent && !isOperatorMention(m));
     if (peers.length > 0) {
       const decision = this.governor.onAgentHop(reply.room);
       if (!decision.allowed) {

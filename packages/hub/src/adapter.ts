@@ -22,6 +22,8 @@ export interface OutboundVoice {
   audio: Buffer;
   mimeType: string;
   text: string;
+  /** Platform user ids to mention as the operator (breaks a muted chat) — see OutboundMessage (#94). */
+  mentionUserIds?: string[];
 }
 
 /**

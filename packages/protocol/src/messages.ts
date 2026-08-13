@@ -23,6 +23,19 @@ export function isBroadcastMention(name: string): boolean {
 }
 
 /**
+ * Canonical tokens an agent uses to address the **human operator** (not an agent).
+ * A reply mentioning one of these makes the hub render a real Telegram mention of
+ * the operator (a visible badge + a reply to their last message, which breaks
+ * mute) — so an agent that genuinely needs a decision can reach the human even in
+ * a muted chat. It is never routed to an agent. (#94)
+ */
+export const OPERATOR_ALIASES: ReadonlySet<string> = new Set(["operator", "op"]);
+
+export function isOperatorMention(name: string): boolean {
+  return OPERATOR_ALIASES.has(name.toLowerCase());
+}
+
+/**
  * A message arriving at the hub from a transport adapter (or re-injected from
  * another agent), normalized into a transport-agnostic shape. This is what the
  * router reasons about; nothing here is Telegram-specific.
@@ -80,6 +93,13 @@ export const outboundMessageSchema = z.object({
   agent: z.string().min(1),
   text: z.string(),
   kind: z.enum(["reply", "notice"]).default("reply"),
+  /**
+   * Platform user ids to render as a real mention of the human operator (#94).
+   * The adapter turns each into a mention entity (a visible `@` badge) and replies
+   * to that user's last message so it breaks through a muted chat. Empty/omitted =
+   * a normal post.
+   */
+  mentionUserIds: z.array(z.string().min(1)).optional(),
 });
 export type OutboundMessage = z.infer<typeof outboundMessageSchema>;
 

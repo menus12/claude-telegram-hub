@@ -259,4 +259,27 @@ describe("TelegramAdapter", () => {
     await adapter.stop();
     expect(api.started).toBe(false);
   });
+
+  it("renders an @operator mention as a real mention link and replies to the operator's last message (#94)", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.start(() => Promise.resolve());
+    // the operator posts (message_id 7) → becomes the mute-breaking reply target
+    api.push({ message_id: 7, chat: { id: 555, type: "private" }, from: { id: 42, is_bot: false }, text: "@infra status?" });
+    await delay(0);
+
+    await adapter.send(
+      { adapter: "telegram", room: "555" },
+      { agent: "infra", text: "blocked, need your call", kind: "reply", mentionUserIds: ["42"] },
+    );
+    const sent = api.sent.at(-1)!;
+    expect(sent.text).toContain("[👤 operator](tg://user?id=42)"); // real mention link
+    expect(sent.opts?.replyToMessageId).toBe(7); // replies to the operator's last message
+
+    // a normal reply carries neither the mention nor an auto reply-to
+    await adapter.send({ adapter: "telegram", room: "555" }, { agent: "infra", text: "done", kind: "reply" });
+    const plain = api.sent.at(-1)!;
+    expect(plain.text).not.toContain("tg://user");
+    expect(plain.opts?.replyToMessageId).toBeUndefined();
+  });
 });
