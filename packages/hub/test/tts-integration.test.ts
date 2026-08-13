@@ -406,6 +406,20 @@ describe("voiced replies (TTS)", () => {
     expect(adapter.sent).toHaveLength(1);
   });
 
+  it("@operator carries the configured operator @username (breaks a muted chat) (#94)", async () => {
+    const { adapter, url } = await startHub(undefined, undefined, {
+      HUB_OPERATOR_USERNAMES: "@a_gorbachev",
+    });
+    const a = attach(url, "platform");
+    await waitFor(a.registered);
+
+    a.client.sendReply({ room: "-100", text: "need your call", mentions: ["operator"] });
+    await waitFor(() => adapter.sent.length >= 1);
+    // the real @username (the mute-breaker) plus the admin id-link fallback
+    expect(adapter.sent[0].out.mentionUsernames).toEqual(["a_gorbachev"]);
+    expect(adapter.sent[0].out.mentionUserIds).toEqual(["user1"]);
+  });
+
   it("a normal reply (no voice) is still text", async () => {
     const synth = new FakeSynthesisService();
     const { adapter, url } = await startHub(synth);

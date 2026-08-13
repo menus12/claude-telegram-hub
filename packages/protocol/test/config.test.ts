@@ -23,6 +23,7 @@ describe("loadHubConfig", () => {
     expect(cfg.duplicateName).toBe("reject");
     expect(cfg.notify).toBe("dm");
     expect(cfg.admins).toEqual([]);
+    expect(cfg.operatorUsernames).toEqual([]);
     expect(cfg.stateFile).toBeUndefined();
     expect(cfg.pairing).toBe(false);
     expect(cfg.sttUrl).toBeUndefined();
@@ -54,6 +55,15 @@ describe("loadHubConfig", () => {
 
   it("rejects an unrecognized HUB_PRESENCE value", () => {
     expect(() => loadHubConfig({ ...minimal, HUB_PRESENCE: "maybe" })).toThrow(/presence/);
+  });
+
+  it("parses HUB_OPERATOR_USERNAMES, stripping a leading @ (#94)", () => {
+    expect(
+      loadHubConfig({ ...minimal, HUB_OPERATOR_USERNAMES: "@a_gorbachev, bob" }).operatorUsernames,
+    ).toEqual(["a_gorbachev", "bob"]);
+    expect(
+      loadHubConfig({ ...minimal, HUB_OPERATOR_USERNAMES: "a_gorbachev" }).operatorUsernames,
+    ).toEqual(["a_gorbachev"]);
   });
 
   it("coerces the presence grace window", () => {
