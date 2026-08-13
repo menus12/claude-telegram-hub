@@ -95,11 +95,21 @@ export const outboundMessageSchema = z.object({
   kind: z.enum(["reply", "notice"]).default("reply"),
   /**
    * Platform user ids to render as a real mention of the human operator (#94).
-   * The adapter turns each into a mention entity (a visible `@` badge) and replies
-   * to that user's last message so it breaks through a muted chat. Empty/omitted =
-   * a normal post.
+   * The adapter turns each into an id-link mention (`tg://user?id=…`, a visible `@`
+   * badge) and replies to that user's last message. This is the *fallback* path:
+   * a bot-generated id-link does NOT reliably trip Telegram's muted-chat "Mentions"
+   * exception, so `mentionUsernames` (a real `@username`) is preferred when known.
+   * Empty/omitted = a normal post.
    */
   mentionUserIds: z.array(z.string().min(1)).optional(),
+  /**
+   * Operator Telegram usernames (without the leading `@`) to render as real
+   * `@username` mentions (#94 follow-up). Unlike an id-link, a `@username` mention
+   * trips the muted-chat "Mentions & Replies" exception, so it actually notifies
+   * the operator in a muted group. Preferred over `mentionUserIds` when the
+   * deployment has configured the operator's username; the id-link is the fallback.
+   */
+  mentionUsernames: z.array(z.string().min(1)).optional(),
 });
 export type OutboundMessage = z.infer<typeof outboundMessageSchema>;
 

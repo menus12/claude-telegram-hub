@@ -282,4 +282,52 @@ describe("TelegramAdapter", () => {
     expect(plain.text).not.toContain("tg://user");
     expect(plain.opts?.replyToMessageId).toBeUndefined();
   });
+
+  it("renders @operator as a real @username mention when configured, not an id-link (#94)", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.start(() => Promise.resolve());
+    api.push({ message_id: 7, chat: { id: 555, type: "private" }, from: { id: 42, is_bot: false }, text: "@infra status?" });
+    await delay(0);
+
+    await adapter.send(
+      { adapter: "telegram", room: "555" },
+      { agent: "infra", text: "blocked, need your call", kind: "reply", mentionUserIds: ["42"], mentionUsernames: ["a_gorbachev"] },
+    );
+    const sent = api.sent.at(-1)!;
+    // real @username (underscore escaped for MarkdownV2) — this is what trips the
+    // muted-chat mention exception; the id-link is NOT used when a username is known.
+    expect(sent.text).toContain("@a\\_gorbachev");
+    expect(sent.text).not.toContain("tg://user");
+    expect(sent.opts?.replyToMessageId).toBe(7); // still replies to the operator's last message
+  });
+
+  it("keeps the plain @username mention when MarkdownV2 parsing fails (#94)", async () => {
+    const api = new FakeTelegramApi();
+    api.failNext(new Error("Bad Request: can't parse entities in message"));
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.send(
+      { adapter: "telegram", room: "555" },
+      { agent: "infra", text: "**x**", kind: "reply", mentionUsernames: ["a_gorbachev"] },
+    );
+    // the plain-text retry keeps a raw @username (unescaped) so the mention still fires
+    expect(api.sent).toHaveLength(1);
+    expect(api.sent[0].text).toContain("@a_gorbachev");
+    expect(api.sent[0].opts?.parseMode).toBeUndefined();
+  });
+
+  it("carries the operator @username into a voiced reply's caption (#94)", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.start(() => Promise.resolve());
+    api.push({ message_id: 9, chat: { id: -100, type: "supergroup" }, from: { id: 42, is_bot: false }, text: "@infra?" });
+    await delay(0);
+    await adapter.sendVoice(
+      { adapter: "telegram", room: "-100" },
+      { agent: "infra", audio: Buffer.from("OGG"), mimeType: "audio/ogg", text: "need your call", mentionUsernames: ["a_gorbachev"] },
+    );
+    // caption (plain text) carries the @username mention + replies to the operator's msg
+    expect(api.sentFiles[0].opts?.caption).toContain("@a_gorbachev");
+    expect(api.sentFiles[0].opts?.replyToMessageId).toBe(9);
+  });
 });

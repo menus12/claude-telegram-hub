@@ -73,10 +73,10 @@ and fast convergence.
      never a guess. A mistyped handle routes nowhere (it falls through as plain text; the peer never
      gets a notification).
    - **To reach the human operator, use `@operator`** (`mentions: ["operator"]`) — and *only* when you
-     genuinely need a decision. The hub turns it into a real Telegram mention that surfaces even in a
-     muted chat (a visible badge, plus a reply that breaks through mute). Don't invent an operator
-     handle or paste a numeric id, and don't `@operator` for FYIs — it's mute-breaking, so keep it for
-     "I'm blocked, I need your call."
+     genuinely need a decision. The hub turns it into a real Telegram mention that notifies the operator
+     even in a muted chat (when the deployment sets `HUB_OPERATOR_USERNAMES`, a real `@username` mention
+     trips Telegram's muted-chat exception). Don't invent an operator handle or paste a numeric id, and
+     don't `@operator` for FYIs — it's mute-breaking, so keep it for "I'm blocked, I need your call."
 
 3. **No opening announcement, no closing sign-off.** Don't announce you're starting ("on it",
    "looking now") and don't sign off ("done", "standing by", "handing back"). Your first message on

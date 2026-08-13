@@ -217,7 +217,7 @@ export class Hub {
       .send(
         { adapter: this.deps.adapter.name, room: ask.room },
         // Mention the operator so the escalation breaks through a muted chat (#94).
-        { ...slaEscalationNotice(ask.from, ask.to, minutes), mentionUserIds: this.access.adminIds() },
+        { ...slaEscalationNotice(ask.from, ask.to, minutes), ...this.operatorMention() },
       )
       .catch((err: unknown) => {
         this.deps.logger("warn", "sla escalation send failed", { error: String(err) });
@@ -237,6 +237,21 @@ export class Hub {
         },
       });
     }
+  }
+
+  /**
+   * The operator-mention fields for an outbound message: the configured operator
+   * `@username`s (which trip the muted-chat mention exception) plus the admin
+   * id-links as a fallback. The adapter prefers usernames and renders the id-link
+   * only when none are configured. Empty object when neither is available. (#94)
+   */
+  private operatorMention(): { mentionUserIds?: string[]; mentionUsernames?: string[] } {
+    const usernames = this.deps.config.operatorUsernames;
+    const ids = this.access.adminIds();
+    return {
+      ...(ids.length ? { mentionUserIds: ids } : {}),
+      ...(usernames.length ? { mentionUsernames: usernames } : {}),
+    };
   }
 
   /** Send a hub notice into a single room/DM (a command reply or admin ping). */
@@ -529,9 +544,10 @@ export class Hub {
    */
   private async postAgentReply(agent: string, reply: ReplyFrame, target: RouteTarget): Promise<void> {
     // An `@operator` in the reply asks the hub to mention the human — render a real
-    // Telegram mention of the admins so it reaches them even in a muted chat (#94).
-    const mentionUserIds = reply.mentions.some(isOperatorMention) ? this.access.adminIds() : undefined;
-    const withMention = mentionUserIds ? { mentionUserIds } : {};
+    // Telegram mention so it reaches them even in a muted chat (#94). Prefer the
+    // configured operator `@username`s (these trip the muted-chat mention exception);
+    // the admin id-links are the fallback when no username is configured.
+    const withMention = reply.mentions.some(isOperatorMention) ? this.operatorMention() : {};
     // `voice: true`/`false` is an explicit choice; when unset, the auto mode decides.
     // A room where an operator ran `/voice off` gets text regardless (#70).
     const wantsVoice =

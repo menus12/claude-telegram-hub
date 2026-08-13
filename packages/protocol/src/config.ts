@@ -25,6 +25,14 @@ function csv(v: string | undefined): string[] | undefined {
 }
 
 /**
+ * Like `csv`, but for Telegram usernames: strips a leading `@` the operator may
+ * include, so `@a_gorbachev, bob` and `a_gorbachev, bob` both parse the same.
+ */
+function usernames(v: string | undefined): string[] | undefined {
+  return csv(v)?.map((u) => u.replace(/^@+/, "")).filter((u) => u.length > 0);
+}
+
+/**
  * Parse a `key:value,key:value` env value into a record (e.g. a per-language voice
  * map `en:af_sky,ru:af_ru`). Keys are lowercased/trimmed; blank/absent → undefined;
  * an entry without a `:` or with an empty side is dropped.
@@ -151,6 +159,14 @@ export const hubConfigSchema = z.object({
    */
   admins: z.array(z.string().min(1)).default([]),
   /**
+   * Operator Telegram usernames (without a leading `@`) used to render an
+   * `@operator` mention as a real `@username` — which trips Telegram's muted-chat
+   * "Mentions & Replies" exception, so an agent's `@operator` actually notifies the
+   * human in a muted group (#94). Empty = fall back to an id-link mention of the
+   * admins (a visible badge, but no reliable push in a muted chat).
+   */
+  operatorUsernames: z.array(z.string().min(1)).default([]),
+  /**
    * Path to a JSON file that persists runtime allowlist changes across restarts.
    * Unset = in-memory only (changes are lost on restart).
    */
@@ -253,6 +269,7 @@ export const HUB_ENV = {
   duplicateName: "HUB_DUPLICATE_NAME",
   notify: "HUB_NOTIFY",
   admins: "HUB_ADMINS",
+  operatorUsernames: "HUB_OPERATOR_USERNAMES",
   stateFile: "HUB_STATE_FILE",
   pairing: "HUB_PAIRING",
   sttUrl: "HUB_STT_URL",
@@ -295,6 +312,7 @@ export function loadHubConfig(env: Env): HubConfig {
       duplicateName: env[HUB_ENV.duplicateName],
       notify: env[HUB_ENV.notify],
       admins: csv(env[HUB_ENV.admins]),
+      operatorUsernames: usernames(env[HUB_ENV.operatorUsernames]),
       stateFile: env[HUB_ENV.stateFile],
       pairing: bool(env[HUB_ENV.pairing]),
       sttUrl: env[HUB_ENV.sttUrl],

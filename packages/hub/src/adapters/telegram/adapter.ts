@@ -72,30 +72,49 @@ export class TelegramAdapter implements TransportAdapter {
   }
 
   /**
-   * When a reply addresses `@operator` (#94), render each operator as a real
-   * MarkdownV2 mention link (`tg://user?id=…` — a visible `@` badge, no username
-   * needed) and, unless the reply already targets a specific message, reply to the
-   * operator's last message so it notifies even in a muted chat.
+   * When a reply addresses `@operator` (#94), render a real Telegram mention of the
+   * human and, unless the reply already targets a specific message, reply to the
+   * operator's last message. Two renderings are returned:
+   *   - `md`: for a MarkdownV2 message — a real `@username` (preferred: it trips the
+   *     muted-chat "Mentions" exception, so it actually notifies) when usernames are
+   *     configured, else the id-link badge (`tg://user?id=…`, which shows a badge but
+   *     does NOT reliably push in a muted chat).
+   *   - `plain`: for a plain-text message (caption / markdown-parse fallback) — the
+   *     raw `@username`s (still create a mention in plain text); empty for the id-link
+   *     form, which needs markdown to render.
    */
   private operatorMention(
     room: string,
     ids: string[] | undefined,
+    usernames: string[] | undefined,
     explicitReplyTo: string | undefined,
-  ): { md: string; replyToId?: number } {
-    if (!ids || ids.length === 0) return { md: "" };
-    const md = ` ${ids.map((id) => `[👤 operator](tg://user?id=${id})`).join(" ")}`;
+  ): { md: string; plain: string; replyToId?: number } {
+    const hasUsernames = usernames !== undefined && usernames.length > 0;
+    const hasIds = ids !== undefined && ids.length > 0;
+    if (!hasUsernames && !hasIds) return { md: "", plain: "" };
+    const md = hasUsernames
+      ? ` ${usernames.map((u) => `@${escapeUsername(u)}`).join(" ")}`
+      : ` ${(ids as string[]).map((id) => `[👤 operator](tg://user?id=${id})`).join(" ")}`;
+    // Plain text can carry a `@username` mention (Telegram still resolves it), but an
+    // id-link is markdown-only, so it has no plain form.
+    const plain = hasUsernames ? ` ${usernames.map((u) => `@${u}`).join(" ")}` : "";
     const replyToId = explicitReplyTo ? undefined : this.lastHumanMsg.get(room);
-    return { md, ...(replyToId !== undefined ? { replyToId } : {}) };
+    return { md, plain, ...(replyToId !== undefined ? { replyToId } : {}) };
   }
 
   async send(target: RouteTarget, out: OutboundMessage): Promise<void> {
-    const mention = this.operatorMention(target.room, out.mentionUserIds, target.replyToId);
+    const mention = this.operatorMention(
+      target.room,
+      out.mentionUserIds,
+      out.mentionUsernames,
+      target.replyToId,
+    );
     const replyToId = target.replyToId ? Number(target.replyToId) : mention.replyToId;
     const base: SendOptions = replyToId !== undefined ? { replyToMessageId: replyToId } : {};
     let sentId: number | undefined;
     try {
       // Render agent markdown as Telegram MarkdownV2 so bold/code/lists/links show,
-      // plus the operator mention link (if any).
+      // plus the operator mention (if any).
       sentId = await this.opts.api.sendMessage(target.room, toTelegramMarkdown(out) + mention.md, {
         ...base,
         parseMode: "MarkdownV2",
@@ -103,11 +122,12 @@ export class TelegramAdapter implements TransportAdapter {
     } catch (err) {
       if (!isParseError(err)) throw err;
       // Telegram rejected the entities — deliver the message as plain text rather
-      // than dropping it.
+      // than dropping it. Keep the plain `@username` mention so an `@operator` still
+      // notifies even on the fallback path.
       this.opts.logger?.("warn", "telegram markdown parse failed; sending plain", {
         error: err instanceof Error ? err.message : String(err),
       });
-      sentId = await this.opts.api.sendMessage(target.room, renderOutbound(out), base);
+      sentId = await this.opts.api.sendMessage(target.room, renderOutbound(out) + mention.plain, base);
     }
     // Index an agent's reply so a Telegram reply to it routes back to that agent.
     // Notices aren't authored by an agent (kind "notice"), so they're not indexed.
@@ -138,13 +158,18 @@ export class TelegramAdapter implements TransportAdapter {
   async sendVoice(target: RouteTarget, out: OutboundVoice): Promise<void> {
     // The caption is the attributed full reply text (the source of truth); the audio
     // is the spoken (sanitized) rendering. Sent plain (short replies, no markup).
-    // For an `@operator` voice reply, reply to the operator's last message so it
-    // breaks a muted chat (#94); the visible badge is text-only, so voice relies on
-    // the reply for the mute-break.
-    const opReplyTo = out.mentionUserIds?.length ? this.lastHumanMsg.get(target.room) : undefined;
-    const replyToId = target.replyToId ? Number(target.replyToId) : opReplyTo;
+    // For an `@operator` voice reply, append the operator `@username` to the caption
+    // (a plain-text `@username` still notifies, breaking a muted chat) and reply to
+    // the operator's last message as a secondary nudge (#94).
+    const mention = this.operatorMention(
+      target.room,
+      out.mentionUserIds,
+      out.mentionUsernames,
+      target.replyToId,
+    );
+    const replyToId = target.replyToId ? Number(target.replyToId) : mention.replyToId;
     const opts: SendFileOptions = {
-      caption: `${attributionPrefix(out.agent)}${out.text}`,
+      caption: `${attributionPrefix(out.agent)}${out.text}${mention.plain}`,
       ...(replyToId !== undefined ? { replyToMessageId: replyToId } : {}),
     };
     const sentId = await this.opts.api.sendVoice(
@@ -305,4 +330,13 @@ export class TelegramAdapter implements TransportAdapter {
 /** Append a bracketed note to message text (keeps any caption the operator sent). */
 function annotate(text: string, note: string): string {
   return text ? `${text}\n[${note}]` : `[${note}]`;
+}
+
+/**
+ * Escape a Telegram username for MarkdownV2. Usernames are `[A-Za-z0-9_]`, so in
+ * practice only `_` (MarkdownV2 italic) needs escaping — but escape the full
+ * special set defensively so the resulting text still resolves as an `@mention`.
+ */
+function escapeUsername(username: string): string {
+  return username.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, "\\$&");
 }
