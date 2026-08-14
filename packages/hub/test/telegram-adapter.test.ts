@@ -228,6 +228,32 @@ describe("TelegramAdapter", () => {
     expect(api.sentFiles[0].bytes.toString()).toBe("OGG");
   });
 
+  it("truncates a voice-note caption over Telegram's 1024-char limit (#94)", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    const longText = "x".repeat(2000);
+    await adapter.sendVoice(
+      { adapter: "telegram", room: "-100" },
+      { agent: "platform", audio: Buffer.from("OGG"), mimeType: "audio/ogg", text: longText },
+    );
+    const caption = api.sentFiles[0].opts?.caption ?? "";
+    expect(caption.length).toBeLessThanOrEqual(1024); // no "caption is too long" 400
+    expect(caption.startsWith("platform ▸ ")).toBe(true); // attribution kept
+    expect(caption.endsWith("…")).toBe(true); // body truncated with an ellipsis
+  });
+
+  it("keeps the operator @mention whole when truncating a long caption (#94)", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.sendVoice(
+      { adapter: "telegram", room: "-100" },
+      { agent: "infra", audio: Buffer.from("OGG"), mimeType: "audio/ogg", text: "y".repeat(2000), mentionUsernames: ["a_gorbachev"] },
+    );
+    const caption = api.sentFiles[0].opts?.caption ?? "";
+    expect(caption.length).toBeLessThanOrEqual(1024);
+    expect(caption).toContain("@a_gorbachev"); // the mention survives truncation
+  });
+
   it("indexes a voiced reply so a reply to it routes back to the agent", async () => {
     const api = new FakeTelegramApi();
     const adapter = new TelegramAdapter({ api, tagSigil: "@" });
