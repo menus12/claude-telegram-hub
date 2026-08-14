@@ -691,7 +691,29 @@ export class Hub {
         this.deps.logger("info", "agent↔agent routing frozen; hop dropped", {
           room: reply.room,
           from: agent,
+          to: peers.join(", "),
         });
+        // Tell the sender its hop wasn't delivered. Otherwise a frozen thread
+        // silently swallows agent↔agent messages and the sender waits forever for a
+        // reply that can't arrive (the visible room copy still posted, so it looks
+        // sent) — the exact "agents can't hear each other" failure. With this, the
+        // sender knows to summarize for the operator (or `@operator`) instead. The
+        // freeze lifts on the next human message.
+        const sender = this.registry.get(agent);
+        if (sender) {
+          const to = peers.map((p) => `@${p}`).join(" ");
+          sender.send({
+            type: "inbound",
+            message: {
+              adapter: this.deps.adapter.name,
+              room: reply.room,
+              fromKind: "agent",
+              fromId: "hub",
+              text: `⏸ agent↔agent routing is paused (loop guard): your message to ${to} was NOT delivered — the coordination thread is frozen until the operator posts. Don't wait on a reply; summarize what you need and use @operator if it's blocking.`,
+              mentions: [agent],
+            },
+          });
+        }
         return;
       }
       const reinjected: InboundMessage = {

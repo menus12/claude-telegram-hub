@@ -169,7 +169,11 @@ export class TelegramAdapter implements TransportAdapter {
     );
     const replyToId = target.replyToId ? Number(target.replyToId) : mention.replyToId;
     const opts: SendFileOptions = {
-      caption: `${attributionPrefix(out.agent)}${out.text}${mention.plain}`,
+      // Telegram caps a media caption at 1024 chars; a longer full-text reply (e.g.
+      // prose the audio speaks + a long code block the caption keeps) otherwise fails
+      // the whole voice send with "caption is too long". Truncate the body, keeping
+      // the attribution prefix and the operator @mention intact.
+      caption: voiceCaption(attributionPrefix(out.agent), out.text, mention.plain),
       ...(replyToId !== undefined ? { replyToMessageId: replyToId } : {}),
     };
     const sentId = await this.opts.api.sendVoice(
@@ -330,6 +334,23 @@ export class TelegramAdapter implements TransportAdapter {
 /** Append a bracketed note to message text (keeps any caption the operator sent). */
 function annotate(text: string, note: string): string {
   return text ? `${text}\n[${note}]` : `[${note}]`;
+}
+
+/** Telegram's hard limit on a media (voice/photo/document) caption. */
+const CAPTION_MAX = 1024;
+
+/**
+ * Build a voice-note caption within Telegram's 1024-char cap: keep the attribution
+ * prefix and the trailing operator `@mention` whole, truncating only the reply body
+ * (with an ellipsis) when the total would overflow. The spoken audio is unaffected —
+ * it renders the (already length-bounded) speakable text, not this caption.
+ */
+function voiceCaption(prefix: string, body: string, suffix: string): string {
+  const full = `${prefix}${body}${suffix}`;
+  if (full.length <= CAPTION_MAX) return full;
+  const room = CAPTION_MAX - prefix.length - suffix.length - 1; // 1 for the ellipsis
+  const trimmed = room > 0 ? `${body.slice(0, room)}…` : "…";
+  return `${prefix}${trimmed}${suffix}`;
 }
 
 /**

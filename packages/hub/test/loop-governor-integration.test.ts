@@ -114,6 +114,38 @@ describe("loop governor (agent↔agent) — end to end", () => {
     expect(gitops.has("h5")).toBe(true);
   });
 
+  it("notifies the sender when a frozen thread drops its hop (no silent drop)", async () => {
+    const adapter = new LoopbackAdapter();
+    hub = new Hub({ config: hubConfig("1"), adapter, logger: () => {} });
+    await hub.start();
+    const url = `ws://127.0.0.1:${hub.port()}`;
+
+    const infra = attach(url, "re-infra");
+    const gitops = attach(url, "re-gitops");
+    await waitFor(() => infra.registered() && gitops.registered());
+
+    await adapter.deliver(human("go", ["re-infra"]));
+    await infra.await("go");
+    // budget 1: this hop is delivered and freezes the thread.
+    infra.client.sendReply({ room: ROOM, text: "hop1", mentions: ["re-gitops"] });
+    await gitops.await("hop1");
+
+    // Frozen: gitops→infra is dropped — but gitops is TOLD it wasn't delivered,
+    // rather than waiting forever on a reply that can't arrive.
+    gitops.client.sendReply({ room: ROOM, text: "dropped-msg", mentions: ["re-infra"] });
+    await waitFor(() =>
+      gitops.injected.some((f) => f.message.fromId === "hub" && /NOT delivered/.test(f.message.text)),
+    );
+    const notice = gitops.injected.find(
+      (f) => f.message.fromId === "hub" && /NOT delivered/.test(f.message.text),
+    )!;
+    expect(notice.message.text).toContain("@re-infra"); // names the undelivered recipient
+    expect(notice.message.mentions).toEqual(["re-gitops"]); // addressed back to the sender
+    // and the peer still never received the dropped hop
+    await delay(60);
+    expect(infra.has("dropped-msg")).toBe(false);
+  });
+
   it("never freezes human→agent delivery, only agent→agent hops", async () => {
     const adapter = new LoopbackAdapter();
     hub = new Hub({ config: hubConfig("1"), adapter, logger: () => {} });
