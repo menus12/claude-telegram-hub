@@ -44,7 +44,9 @@ const BASE_INSTRUCTIONS = [
   "Treat the quote as given context (no need to ask them to restate it) and answer the new request.",
   "An inbound file is saved locally and its path given in the `attachment_path` attribute —",
   "open it with your normal file tools. To send a file out, call `send_file` with the `room`",
-  "and a local `path` (plus an optional `caption`).",
+  "and a local `path` (plus an optional `caption`). To hand a file to peer agents, add their",
+  "names in `mentions` — each receives the file at a local path; without it the file only",
+  "posts to the room for the operator and peer agents won't get the bytes.",
   "When the message you're answering arrived as voice (its `<channel>` tag has `voice=\"true\"`),",
   "reply in kind by default: set `voice: true` on your `reply` — one coherent reply, not a text",
   "reply plus a separate voice note. Write the spoken text for the ear: expand abbreviations/jargon",
@@ -169,6 +171,7 @@ export interface SendFileArgs {
   room: string;
   path: string;
   caption?: string;
+  mentions?: string[];
   hub?: string;
 }
 
@@ -187,6 +190,13 @@ export function parseSendFileArgs(args: unknown): SendFileArgs {
   if (a.caption !== undefined && typeof a.caption !== "string") {
     throw new Error("send_file: `caption` must be a string");
   }
+  let mentions: string[] | undefined;
+  if (a.mentions !== undefined) {
+    if (!Array.isArray(a.mentions) || a.mentions.some((x) => typeof x !== "string")) {
+      throw new Error("send_file: `mentions` must be an array of strings");
+    }
+    mentions = a.mentions as string[];
+  }
   if (a.hub !== undefined && typeof a.hub !== "string") {
     throw new Error("send_file: `hub` must be a string");
   }
@@ -194,6 +204,7 @@ export function parseSendFileArgs(args: unknown): SendFileArgs {
     room: a.room,
     path: a.path,
     ...(a.caption ? { caption: a.caption } : {}),
+    ...(mentions ? { mentions } : {}),
     ...(a.hub ? { hub: a.hub } : {}),
   };
 }
@@ -340,7 +351,7 @@ export function buildChannel(hubs: LabeledChannelConfig[], deps: BuildChannelDep
       {
         name: "send_file",
         description:
-          "Send a local file or image out through the hub to a room. Provide the room and an absolute local path; add an optional caption.",
+          "Send a local file or image out through the hub to a room. Provide the room and an absolute local path; add an optional caption. To hand the file to peer agents (not just the operator), list their names in `mentions` — each receives the file at a local path.",
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -350,6 +361,12 @@ export function buildChannel(hubs: LabeledChannelConfig[], deps: BuildChannelDep
             },
             path: { type: "string", description: "Absolute path to the local file to send." },
             caption: { type: "string", description: "Optional caption to accompany the file." },
+            mentions: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Peer agent names to deliver the file to (agent-to-agent handoff). Each tagged agent receives it as an inbound with the file saved to a local path. Without this, the file only posts to the room for the operator — peer agents won't get the bytes.",
+            },
             ...(multiHub ? hubField : {}),
           },
           required: ["room", "path"],
@@ -389,10 +406,23 @@ export function buildChannel(hubs: LabeledChannelConfig[], deps: BuildChannelDep
       const client = clients.get(target.label);
       if (!client) return { content: [{ type: "text", text: `send_file: no client for hub "${target.label}"` }] };
       const file = await readOutboundFile(args.path, maxFileMb * MB);
-      client.sendFile({ room: args.room, file, ...(args.caption ? { caption: args.caption } : {}) });
-      log("info", "file sent to hub", { hub: target.label, room: args.room, filename: file.filename });
+      client.sendFile({
+        room: args.room,
+        file,
+        ...(args.caption ? { caption: args.caption } : {}),
+        ...(args.mentions ? { mentions: args.mentions } : {}),
+      });
+      log("info", "file sent to hub", {
+        hub: target.label,
+        room: args.room,
+        filename: file.filename,
+        mentions: args.mentions?.length ?? 0,
+      });
+      const hubSuffix = multiHub ? ` (hub ${target.label})` : "";
+      const toPeers =
+        args.mentions && args.mentions.length > 0 ? ` and handed to ${args.mentions.join(", ")}` : "";
       return {
-        content: [{ type: "text", text: `sent ${file.filename} to hub${multiHub ? ` (hub ${target.label})` : ""}` }],
+        content: [{ type: "text", text: `sent ${file.filename} to hub${hubSuffix}${toPeers}` }],
       };
     }
     throw new Error(`unknown tool: ${req.params.name}`);

@@ -102,6 +102,41 @@ describe("files over the hub (loopback)", () => {
     expect(adapter.sentFiles[0].out).toEqual({ agent: "re-infra", file, caption: "the diagram" });
   });
 
+  it("hands an agent's file to a tagged peer agent, plus the room copy", async () => {
+    const { adapter, url } = await startHub();
+    const front = attach(url, "front");
+    const kb = attach(url, "kb");
+    await waitFor(() => front.registered() && kb.registered());
+
+    front.client.sendFile({ room: "-100", file, caption: "authoring handoff", mentions: ["kb"] });
+
+    // the tagged peer receives the file re-injected into its session
+    await waitFor(() => kb.injected.length >= 1);
+    expect(kb.injected[0].file).toEqual(file);
+    expect(kb.injected[0].message).toMatchObject({
+      fromKind: "agent",
+      fromId: "front",
+      text: "authoring handoff",
+    });
+    // and the visible copy still posts to the room for the operator
+    await waitFor(() => adapter.sentFiles.length >= 1);
+    expect(adapter.sentFiles[0].out).toMatchObject({ agent: "front", file });
+    // the sender never receives its own file back
+    expect(front.injected).toHaveLength(0);
+  });
+
+  it("posts an offline notice when a file is handed to an offline peer", async () => {
+    const { adapter, url } = await startHub();
+    const front = attach(url, "front");
+    await waitFor(front.registered);
+
+    front.client.sendFile({ room: "-100", file, mentions: ["ghost"] });
+    const notice = await adapter.waitForSent((s) => s.out.kind === "notice");
+    expect(notice.out.text).toContain("@ghost");
+    // the room still got the file copy
+    expect(adapter.sentFiles.length).toBeGreaterThanOrEqual(1);
+  });
+
   it("does not deliver an inbound file to an offline tagged agent", async () => {
     const { adapter, url } = await startHub();
     const a = attach(url, "re-infra");

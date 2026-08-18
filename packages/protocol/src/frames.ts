@@ -51,15 +51,20 @@ export const replyFrameSchema = z.object({
 export type ReplyFrame = z.infer<typeof replyFrameSchema>;
 
 /**
- * A file the session wants delivered out to a room (agent → operator/room). The
- * channel reads the agent's local file and sends the bytes here; the hub hands
- * them to the adapter to upload. Files are human-facing — no agent→agent routing.
+ * A file the session wants delivered out to a room. The channel reads the agent's
+ * local file and sends the bytes here; the hub hands them to the adapter to upload
+ * (so the operator sees it) and, when `mentions` name peer agents, re-injects the
+ * bytes into each tagged peer's session — the same agent↔agent hop text replies
+ * take, so an agent can hand a file (a bundle, a report) to another agent. The peer
+ * receives it as an inbound with the file materialized to a local path.
  */
 export const sendFileFrameSchema = z.object({
   type: z.literal("send_file"),
   room: z.string().min(1),
   file: filePayloadSchema,
   caption: z.string().optional(),
+  /** Peer agent names to hand this file to (agent→agent delivery); like a reply's. */
+  mentions: z.array(z.string().min(1)).default([]),
 });
 export type SendFileFrame = z.infer<typeof sendFileFrameSchema>;
 

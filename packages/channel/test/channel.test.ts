@@ -349,17 +349,21 @@ describe("MCP wiring (in-memory)", () => {
     try {
       const path = join(dir, "chart.png");
       await writeFile(path, "PNG-BYTES");
-      await client.callTool({
+      const res = await client.callTool({
         name: "send_file",
-        arguments: { room: "-100", path, caption: "the chart" },
+        arguments: { room: "-100", path, caption: "the chart", mentions: ["kb", "core"] },
       });
       expect(files).toHaveLength(1);
       expect(files[0].room).toBe("-100");
       expect(files[0].caption).toBe("the chart");
+      expect(files[0].mentions).toEqual(["kb", "core"]); // agent→agent handoff forwarded
       const payload: FilePayload = files[0].file;
       expect(payload.filename).toBe("chart.png");
       expect(payload.mimeType).toBe("image/png");
       expect(Buffer.from(payload.dataBase64, "base64").toString()).toBe("PNG-BYTES");
+      // the result names the peers the file was handed to
+      const text = (res.content as { type: string; text: string }[])[0].text;
+      expect(text).toContain("handed to kb, core");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -49,6 +49,18 @@ describe("session→hub frames", () => {
     if (frame.type !== "send_file") throw new Error("expected send_file");
     expect(frame.file.filename).toBe("a.png");
     expect(frame.caption).toBe("here");
+    expect(frame.mentions).toEqual([]); // defaults to no agent recipients
+  });
+
+  it("parses a send_file frame with peer mentions (agent→agent handoff)", () => {
+    const frame = sessionToHubFrameSchema.parse({
+      type: "send_file",
+      room: "-100",
+      file: { filename: "a.png", mimeType: "image/png", dataBase64: "AAAA" },
+      mentions: ["kb", "core"],
+    });
+    if (frame.type !== "send_file") throw new Error("expected send_file");
+    expect(frame.mentions).toEqual(["kb", "core"]);
   });
 
   it("rejects a send_file frame with an empty file payload", () => {
