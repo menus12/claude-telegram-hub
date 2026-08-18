@@ -644,7 +644,12 @@ export class Hub {
     return true;
   }
 
-  /** session → hub → adapter: deliver an agent's file out to a room. */
+  /**
+   * session → hub: deliver an agent's file. Posts the visible copy to the room (so
+   * the operator sees it) and, when the file tags peer agents, re-injects the bytes
+   * into each tagged peer's session — the same governed agent↔agent hop a text reply
+   * takes, so a file handoff isn't a silent drop for peers (#file-handoff).
+   */
   private onSendFile(agent: string, frame: SendFileFrame): void {
     const target: RouteTarget = { adapter: this.deps.adapter.name, room: frame.room };
     const out = {
@@ -652,9 +657,65 @@ export class Hub {
       file: frame.file,
       ...(frame.caption ? { caption: frame.caption } : {}),
     };
+    // 1) Visible copy to the room (the operator), as before.
     void this.deps.adapter.sendFile(target, out).catch((err: unknown) => {
       this.deps.logger("warn", "adapter sendFile failed", { error: String(err) });
     });
+
+    // 2) Agent→agent: hand the bytes to any tagged peers. `operator`/broadcast address
+    // the human/room, not a peer, so they're dropped from the re-injection set.
+    const mentions = this.effective("broadcast")
+      ? frame.mentions.filter((m) => !isBroadcastMention(m))
+      : frame.mentions;
+    const peers = mentions.filter((m) => m !== agent && !isOperatorMention(m));
+    if (peers.length === 0) return;
+
+    const decision = this.governor.onAgentHop(frame.room);
+    if (!decision.allowed) {
+      this.deps.logger("info", "agent↔agent routing frozen; file hop dropped", {
+        room: frame.room,
+        from: agent,
+        to: peers.join(", "),
+      });
+      // Same anti-silent-drop notice as a text hop (#94/v0.10.2): tell the sender the
+      // file didn't reach the peers, so it doesn't wait on a handoff that never landed.
+      const sender = this.registry.get(agent);
+      if (sender) {
+        const to = peers.map((p) => `@${p}`).join(" ");
+        sender.send({
+          type: "inbound",
+          message: {
+            adapter: this.deps.adapter.name,
+            room: frame.room,
+            fromKind: "agent",
+            fromId: "hub",
+            text: `⏸ agent↔agent routing is paused (loop guard): your file for ${to} was NOT delivered to them (it did post to the room). Re-hand it after a human message, or share a filesystem path.`,
+            mentions: [agent],
+          },
+        });
+      }
+      return;
+    }
+
+    const reinjected: InboundMessage = {
+      adapter: this.deps.adapter.name,
+      room: frame.room,
+      fromKind: "agent",
+      fromId: agent,
+      text: frame.caption ?? `[file: ${frame.file.filename}]`,
+      mentions,
+    };
+    void this.routeToMentioned(reinjected, frame.file).catch((err: unknown) => {
+      this.deps.logger("warn", "file re-injection failed", { error: String(err) });
+    });
+    if (decision.froze) {
+      this.deps.logger("info", "hop budget exhausted; freezing thread", { room: frame.room });
+      void this.deps.adapter
+        .send({ adapter: this.deps.adapter.name, room: frame.room }, loopFrozenNotice())
+        .catch((err: unknown) => {
+          this.deps.logger("warn", "adapter send failed", { error: String(err) });
+        });
+    }
   }
 
   /** hub → adapter: a session's reply. */

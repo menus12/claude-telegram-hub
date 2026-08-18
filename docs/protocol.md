@@ -37,7 +37,7 @@ frame; the hub calls `isProtocolCompatible(peer)` and requires an **exact major 
 |--------|---------|--------|
 | `register` | First frame; authenticate + declare identity + version | `protocolVersion`, `agent`, `secret` |
 | `reply` | A message to deliver back out through the hub | `room`, `text`, `mentions[]` (default `[]`), `replyToId?` |
-| `send_file` | A file to deliver out to a room (agent → operator/room) | `room`, `file` (`FilePayload`), `caption?` |
+| `send_file` | A file to deliver to a room and/or hand to peer agents | `room`, `file` (`FilePayload`), `caption?`, `mentions[]` (default `[]`) |
 | `heartbeat` | Liveness keepalive | — |
 
 ### hub → session

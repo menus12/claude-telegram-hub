@@ -133,9 +133,12 @@ that already carries messages — so file transfer works whether the hub is co-l
   caption). The channel reads the bytes and sends them through the hub; the adapter uploads them —
   as a photo for small images, otherwise a document (preserving the file, up to ~50 MB). Captions
   are attributed like replies.
-
-Files are human-facing: there is no agent→agent file re-injection, and file sends don't touch the
-loop governor.
+- **Agent→agent handoff.** `send_file` also takes `mentions` (peer agent names). The visible copy
+  still posts to the room for the operator, and the bytes are re-injected into each tagged peer's
+  session — the same materialize-to-a-local-path flow inbound files use, so a peer opens the handed
+  file at its own `attachment_path`. This is a governed agent↔agent hop (like a text reply): on a
+  frozen thread the file hop is dropped and the sender is told, rather than silently swallowed.
+  Without `mentions`, a file is human-facing only (posts to the room; peer agents don't get bytes).
 
 ## Voice notes (opt-in)
 

@@ -26,6 +26,8 @@ export interface SendFileInput {
   room: string;
   file: FilePayload;
   caption?: string;
+  /** Peer agent names to hand the file to (agent→agent delivery). */
+  mentions?: string[];
 }
 
 /** The subset of HubClient the channel wiring depends on (injectable in tests). */
@@ -104,6 +106,7 @@ export class HubClient implements HubLike {
       type: "send_file",
       room: input.room,
       file: input.file,
+      mentions: input.mentions ?? [],
       ...(input.caption ? { caption: input.caption } : {}),
     });
   }
