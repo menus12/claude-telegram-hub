@@ -105,6 +105,29 @@ describe("buildInboundNotification", () => {
     expect(buildInboundNotification(humanFrame("typed")).params.meta.voice).toBeUndefined();
   });
 
+  it("frames a reply-to per recipient: 'your message' for the replied-to, the author for a tagged peer (Option A)", () => {
+    const frame: InboundFrame = {
+      type: "inbound",
+      message: {
+        adapter: "telegram",
+        room: "-100",
+        fromKind: "human",
+        fromId: "42",
+        text: "upload the files. @nuc status on P0?",
+        mentions: ["nuc", "deposits"],
+        replyTo: { author: "deposits", text: "here are the current files" },
+      },
+    };
+    // the tagged peer sees the reply is directed at deposits (context, not for them)
+    const toNuc = buildInboundNotification(frame, { selfAgent: "nuc" });
+    expect(toNuc.params.content).toContain('↩ In reply to deposits: "here are the current files"');
+    expect(toNuc.params.meta.reply_to_from).toBe("deposits");
+    // the replied-to agent sees it as a direct reply to itself, not a third-person quote
+    const toDeposits = buildInboundNotification(frame, { selfAgent: "deposits" });
+    expect(toDeposits.params.content).toContain('↩ In reply to your earlier message: "here are the current files"');
+    expect(toDeposits.params.meta.reply_to_from).toBeUndefined();
+  });
+
   it("emits only identifier-safe meta keys", () => {
     const meta = buildInboundNotification(
       humanFrame("x", ["a", "b"]),

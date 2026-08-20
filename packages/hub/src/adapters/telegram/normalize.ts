@@ -42,9 +42,11 @@ export type ReplyTargetResolver = (reply: ReplyContext) => string | undefined;
  * (the bytes travel separately, fetched by the adapter).
  *
  * A Telegram reply carries selective context: with **no** `@tag` it addresses the
- * replied-to agent (continue the thread); **with** an `@tag` the tag wins as the
- * recipient and the replied-to message rides along as `replyTo` context, so the
- * operator can pull a just-in-time peer into a thread without re-stating it.
+ * replied-to agent (continue the thread); **with** an `@tag` BOTH are recipients
+ * (Option A) — the replied-to agent is addressed (an instruction in the reply
+ * reaches it) and the tagged peer is pulled in with the replied-to message as
+ * `replyTo` context. Each recipient's framing (channel-side) tells "replied to you"
+ * apart from "you were tagged on a reply to <author>".
  */
 export function toInboundMessage(
   msg: TgMessage,
@@ -65,15 +67,22 @@ export function toInboundMessage(
       ...(repliedTo.text !== undefined ? { text: repliedTo.text } : {}),
     });
     if (mentions.length > 0) {
-      // Explicit @mentions win as the recipients; the reply-to is CONTEXT — thread
-      // the quoted message to whoever was tagged so a just-in-time peer catches up
-      // without the operator re-stating it. (The reply-to author is NOT re-pinged.)
+      // Explicit @mentions are recipients — AND so is the reply-to author (Option A):
+      // replying to someone addresses them, so they must RECEIVE the message, not just
+      // have it quoted to the tagged peer. This fixes the case where one reply both
+      // instructs the reply-to target ("do X") and tags a peer ("@B, status?") —
+      // previously only the peer got it, and misread the whole text as its own, while
+      // the reply-to target never got the instruction. The quoted message still rides
+      // along as `replyTo` context; each recipient's framing (rendered channel-side)
+      // distinguishes "replied to you" from "you were tagged on a reply to <author>".
+      let quotedAuthor = author;
       if (repliedTo.text) {
         const { author: fromPrefix, body } = splitQuoted(repliedTo.text);
+        quotedAuthor = author ?? fromPrefix;
         const trimmed = body.length > MAX_QUOTE_CHARS ? `${body.slice(0, MAX_QUOTE_CHARS)}…` : body;
-        const quotedAuthor = author ?? fromPrefix;
         if (trimmed.trim()) replyTo = { ...(quotedAuthor ? { author: quotedAuthor } : {}), text: trimmed };
       }
+      if (quotedAuthor && !mentions.includes(quotedAuthor)) mentions.push(quotedAuthor);
     } else if (author) {
       // No explicit tag: the reply-to addresses that agent (continue the thread).
       // No quote — it's the agent's own prior message, so it already has the context.

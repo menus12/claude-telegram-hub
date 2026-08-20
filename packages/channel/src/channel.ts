@@ -80,12 +80,12 @@ export function buildInstructions(labels: string[]): string {
  */
 export function buildInboundNotification(
   frame: InboundFrame,
-  opts: { hub?: string; attachmentPath?: string } = {},
+  opts: { hub?: string; attachmentPath?: string; selfAgent?: string } = {},
 ): {
   method: typeof CHANNEL_NOTIFICATION_METHOD;
   params: { content: string; meta: Record<string, string> };
 } {
-  const { hub, attachmentPath } = opts;
+  const { hub, attachmentPath, selfAgent } = opts;
   const m = frame.message;
   const senderLabel = hub ? `${hub}/${m.fromId}` : `agent ${m.fromId}`;
   let content = m.fromKind === "agent" ? `From ${senderLabel}: ${m.text}` : m.text;
@@ -97,12 +97,17 @@ export function buildInboundNotification(
   };
   if (hub) meta.hub = hub;
   if (m.replyTo) {
-    // Quoted context the operator pointed you at (a reply-to). Prepend it so the
-    // agent catches up without a restatement; expose the author in meta too.
-    const who = m.replyTo.author
-      ? (hub ? `${hub}/${m.replyTo.author}` : m.replyTo.author)
-      : "an earlier message";
-    if (m.replyTo.author) meta.reply_to_from = m.replyTo.author;
+    // Quoted context from a reply-to. Frame it per recipient (Option A): if YOU are
+    // the one being replied to, it reads "your earlier message" (a direct reply to
+    // you); if you were additionally tagged on a reply to someone else, it names that
+    // author so you know the quote — and the reply — is directed at them, not you.
+    const repliedToSelf = selfAgent !== undefined && m.replyTo.author === selfAgent;
+    const who = repliedToSelf
+      ? "your earlier message"
+      : m.replyTo.author
+        ? (hub ? `${hub}/${m.replyTo.author}` : m.replyTo.author)
+        : "an earlier message";
+    if (m.replyTo.author && !repliedToSelf) meta.reply_to_from = m.replyTo.author;
     content = `↩ In reply to ${who}: "${m.replyTo.text}"\n\n${content}`;
   }
   if (m.mentions.length > 0) meta.mentions = m.mentions.join(",");
@@ -256,11 +261,13 @@ export function buildChannel(hubs: LabeledChannelConfig[], deps: BuildChannelDep
   // by its `room` (Telegram chat_ids are globally unique, so this can't collide).
   const roomToHub = new Map<string, string>();
 
-  const inject = (frame: InboundFrame, label: string, attachmentPath?: string): void => {
+  const inject = (frame: InboundFrame, cfg: LabeledChannelConfig, attachmentPath?: string): void => {
+    const label = cfg.label;
     roomToHub.set(frame.message.room, label);
     const note = buildInboundNotification(frame, {
       ...(multiHub ? { hub: label } : {}),
       ...(attachmentPath ? { attachmentPath } : {}),
+      selfAgent: cfg.agent,
     });
     void mcp
       .notification(note as unknown as Parameters<typeof mcp.notification>[0])
@@ -271,7 +278,7 @@ export function buildChannel(hubs: LabeledChannelConfig[], deps: BuildChannelDep
 
   const onInbound = (frame: InboundFrame, cfg: LabeledChannelConfig): void => {
     if (!frame.file) {
-      inject(frame, cfg.label);
+      inject(frame, cfg);
       return;
     }
     // Materialize the bytes to a local path, then inject with that path so the
@@ -281,11 +288,11 @@ export function buildChannel(hubs: LabeledChannelConfig[], deps: BuildChannelDep
     void materializeInboundFile(owner, frame.file)
       .then((path) => {
         log("info", "saved inbound file", { hub: cfg.label, path, filename: frame.file?.filename });
-        inject(frame, cfg.label, path);
+        inject(frame, cfg, path);
       })
       .catch((err: unknown) => {
         log("warn", "failed to save inbound file", { hub: cfg.label, error: String(err) });
-        inject(frame, cfg.label);
+        inject(frame, cfg);
       });
   };
 

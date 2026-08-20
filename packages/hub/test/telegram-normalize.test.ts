@@ -101,16 +101,18 @@ describe("toInboundMessage", () => {
     expect(m?.mentions).toEqual([]);
   });
 
-  it("an explicit @tag wins as recipient; the reply-to rides along as context (#92)", () => {
-    // reply to re-infra's message, tag @re-gitops → gitops is the recipient, and
-    // re-infra's quoted message is threaded as context (re-infra is NOT re-pinged).
+  it("delivers to both the tagged peer AND the reply-to author, with context (#92/Option A)", () => {
+    // reply to re-infra's message, tag @re-gitops → BOTH are recipients: re-infra
+    // is being replied to (addressed), re-gitops is additionally tagged and gets
+    // re-infra's quoted message as context. (Was: re-infra NOT re-pinged — that
+    // dropped an instruction meant for the reply-to target.)
     const reply: TgMessage = {
       ...base,
       text: "@re-gitops take a look",
       reply_to_message: { message_id: 7, text: "re-infra ▸ all green on egress" },
     };
     const m = toInboundMessage(reply, "@", () => "re-infra");
-    expect(m?.mentions).toEqual(["re-gitops"]);
+    expect(m?.mentions).toEqual(["re-gitops", "re-infra"]);
     expect(m?.replyTo).toEqual({ author: "re-infra", text: "all green on egress" });
   });
 
