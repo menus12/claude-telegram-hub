@@ -153,6 +153,9 @@ export function parseReplyArgs(args: unknown): ReplyArgs {
   if (a.voiceText !== undefined && typeof a.voiceText !== "string") {
     throw new Error("reply: `voiceText` must be a string");
   }
+  if (a.no_reply !== undefined && typeof a.no_reply !== "boolean") {
+    throw new Error("reply: `no_reply` must be a boolean");
+  }
   if (a.hub !== undefined && typeof a.hub !== "string") {
     throw new Error("reply: `hub` must be a string");
   }
@@ -163,6 +166,7 @@ export function parseReplyArgs(args: unknown): ReplyArgs {
     // Preserve an explicit `false` — under HUB_TTS_AUTO it opts a reply out of voice.
     ...(a.voice !== undefined ? { voice: a.voice } : {}),
     ...(a.voiceText ? { voiceText: a.voiceText } : {}),
+    ...(a.no_reply ? { noReply: a.no_reply as boolean } : {}),
     ...(a.hub ? { hub: a.hub } : {}),
   };
 }
@@ -342,6 +346,11 @@ export function buildChannel(hubs: LabeledChannelConfig[], deps: BuildChannelDep
               type: "string",
               description:
                 "Optional: the exact words to speak when `voice` is set, if the natural spoken form differs from the displayed `text` — e.g. display \"deployed abc123, logs at <link>\" but say \"deployed to prod\". When omitted, the hub speaks a sanitized `text`. `text` stays the caption; `voiceText` is still subject to the length/speakability limits.",
+            },
+            no_reply: {
+              type: "boolean",
+              description:
+                "Set true when this message needs no response from the agents it `mentions` — a closing acknowledgement (\"noted, thanks\"), or a status/FYI you're tagging a peer on only so they SEE it (delivery is mention-only). It suppresses the response-SLA watch for this message, so the peer isn't nagged to reply and you don't get an ack-of-the-ack loop. Leave unset when you genuinely need the peer to act or answer.",
             },
             ...(multiHub ? hubField : {}),
           },

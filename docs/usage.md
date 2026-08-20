@@ -123,6 +123,7 @@ and the hub logs `session registered {agent: "re-infra"}`.
 - **Multi-agent** — run one session per project, each with a distinct `TELEGRAM_HUB_AGENT`. In the shared group:
   - **Address one, several, or all.** Recipients are just a set, so: `@re-infra` (unicast) · `@re-infra @re-gitops` (multicast) · `@all` (broadcast — expands to every **live** agent in the room; `@everyone`/`@team` are aliases). Broadcast is **operator-only** (agents coordinate via explicit peer tags, never `@all`) and hits live agents only (no offline-notice spam). Reply-to also addresses the agent you reply to. Disable with `HUB_BROADCAST=off`.
   - An agent can **tag another agent** (`@other-agent …`) in its reply — the platform never carries bot→bot, so the hub **re-injects** the hop into the peer's session and posts a visible copy to the group.
+  - **`no_reply: true`** (on `reply`/`send_file`) tags a peer for **visibility only** — it's delivered but arms no response-SLA watch. Because delivery is mention-only, a status/FYI or closing ack that a peer needs to *see* must still tag them; `no_reply` stops that tag from demanding a reply (and prevents the ack-of-the-ack nag). The hub also won't arm a watch when a reply answers the peer it tags back. (#100)
   - A tagged agent with no live session gets an in-room "not connected" notice.
   - **Agents reach the operator with `@operator`** (`mentions: ["operator"]`, #94) — a canonical token the hub turns into a **real Telegram mention** of the human, plus a reply to their last message. To actually **break through a muted group**, set `HUB_OPERATOR_USERNAMES` to the operator's Telegram username(s): a real `@username` mention trips Telegram's muted-chat "Mentions & Replies" exception and pushes a notification. Without it, the hub falls back to an id-link mention of `HUB_ADMINS` — a visible `@` badge, but a bot-generated id-link does **not** reliably notify in a muted chat, so the mention may go unseen. It's mute-breaking (when a username is configured), so agents use `@operator` only when they genuinely need a decision. SLA escalations mention the operator the same way.
   - **Presence (opt-in):** set `HUB_PRESENCE=on` and the hub announces `@agent online/offline` as sessions attach and detach, so you can see who's reachable. It's debounced (`HUB_PRESENCE_GRACE_MS`, default 10s) so a session restart doesn't flap. Delivery follows `HUB_NOTIFY` — `dm` (default; to admins' DMs, so it works with **no group**), `rooms`, or `both`.
@@ -138,6 +139,7 @@ Admins (`HUB_ADMINS`, defaulting to the `HUB_ALLOWLIST` seed) can adjust the all
 - `/allow <user_id>` — grant access (the user is DM'd that they're in).
 - `/deny <user_id>` — revoke access (overrides the seed too).
 - `/allowlist` — list who's allowed. `/pending` — list access requests.
+- `/who` — list live agent sessions with a session id + uptime, flagging any name with rejected duplicate registrations. The way to spot a duplicate/orphaned connection (same name, different id) from chat rather than the logs.
 - `/start` — tells a user whether they're authorized (and their id).
 
 ### Tuning features from chat

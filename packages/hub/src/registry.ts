@@ -37,4 +37,13 @@ export class AgentRegistry {
   list(): string[] {
     return [...this.byName.keys()];
   }
+
+  /** Live registrations with their session metadata, for the `/who` roster (#99). */
+  entries(): { agent: string; id: number; connectedAt: number }[] {
+    return [...this.byName.values()].map((s) => ({
+      agent: s.agent,
+      id: s.id,
+      connectedAt: s.connectedAt,
+    }));
+  }
 }

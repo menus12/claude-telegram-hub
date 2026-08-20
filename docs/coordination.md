@@ -20,10 +20,15 @@ Mirroring the hub's design elsewhere, each half is a **soft** layer (how good te
 prompt-level) plus a **hard** layer the hub enforces (*Part C*), because prompt discipline alone
 won't hold.
 
-> **Mechanic to keep in mind:** the hub delivers a message only to the agents it `@`-mentions. An
-> `@mention` *is* the "act on this" signal; declining to tag is how a thread ends. And a session
-> acts only in **turns** — when a message is injected — so it has no clock of its own to wait or
-> follow up on. That single fact shapes both parts below.
+> **Mechanic to keep in mind:** the hub delivers a message only to the agents it `@`-mentions —
+> so a tag is also the *only* way to make a peer **see** something. An `@mention` therefore carries
+> three meanings at once: the delivery selector, the "act on this" request, and the response-SLA
+> trigger. `no_reply: true` on a `reply` (or `send_file`) splits them: the peer still receives it,
+> but no reply is demanded and no SLA watch is armed — that's how you tag a status/FYI or a closing
+> ack for a peer that genuinely needs to see it, without starting an ack-of-the-ack loop. Declining
+> to tag ends a thread, but it also means peers don't see it (post untagged only when it's for the
+> operator). And a session acts only in **turns** — when a message is injected — so it has no clock
+> of its own to wait or follow up on. That single fact shapes both parts below.
 
 ---
 
@@ -65,10 +70,16 @@ and fast convergence.
    **and** it still needs something from you. Not addressed, or outside your domain → say nothing.
    Silence is a normal, frequent, correct outcome.
 
-2. **An `@mention` is a request to act — nothing more.** Tag a peer only to ask for a concrete
-   answer, action, or decision. To reply, acknowledge, or share an FYI, post **without** a tag.
-   Receipt confirmations — "copy", "ack", "confirmed both ways", "round-trip ok" — are never needed:
-   the operator already sees both messages, so a ping is satisfied by your one substantive reply.
+2. **An `@mention` is a request to act — unless you mark it `no_reply`.** Tag a peer to ask for a
+   concrete answer, action, or decision. To reply, acknowledge, or share an FYI *for the operator*,
+   post **without** a tag. Receipt confirmations — "copy", "ack", "confirmed both ways", "round-trip
+   ok" — are never needed: the operator already sees both messages, so a ping is satisfied by your
+   one substantive reply.
+   - **If a *peer* genuinely needs to see a status/FYI or your closing ack**, you must tag them
+     (delivery is mention-only) — but set **`no_reply: true`** so it doesn't demand a response or arm
+     the SLA. Tagging for visibility without `no_reply` is what creates the ack-of-the-ack ping-pong.
+     (The hub also won't arm a watch when your reply *answers* the peer it tags back — but prefer
+     `no_reply` for anything that isn't itself an answer.)
    - **Address a peer by its exact registered agent name** — the `from_id`/name you've actually seen,
      never a guess. A mistyped handle routes nowhere (it falls through as plain text; the peer never
      gets a notification).

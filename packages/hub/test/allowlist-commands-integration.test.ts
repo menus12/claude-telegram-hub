@@ -120,6 +120,20 @@ describe("in-chat allowlist commands", () => {
     expect(text(adapter, (t) => t.startsWith("Allowed:"))!.out.text).toContain("admin1");
   });
 
+  it("/who lists live sessions with their ids for an admin (#99)", async () => {
+    const { adapter, url } = await startHub();
+    const infra = attach(url, "re-infra");
+    const kb = attach(url, "kb");
+    await waitFor(() => infra.registered() && kb.registered());
+
+    await adapter.deliver(msg("admin1", "/who"));
+    await waitFor(() => text(adapter, (t) => t.startsWith("Live sessions")) !== undefined);
+    const roster = text(adapter, (t) => t.startsWith("Live sessions"))!.out.text;
+    expect(roster).toContain("Live sessions (2)");
+    expect(roster).toContain("re-infra — session #");
+    expect(roster).toContain("kb — session #");
+  });
+
   it("does not swallow a non-command slash message meant for an agent", async () => {
     const { adapter, url } = await startHub();
     const infra = attach(url, "re-infra");
