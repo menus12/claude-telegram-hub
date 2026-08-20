@@ -1,11 +1,20 @@
 import WebSocket from "ws";
 import type { HubToSessionFrame } from "@claude-telegram-hub/protocol";
 
+/** Monotonic session id, so a roster (`/who`) can distinguish two connections
+ * that claim the same agent name (the duplicate-registration case). */
+let nextSessionId = 1;
+
 /**
  * A registered session: one live channel connection, addressed by agent name.
  * Wraps the socket so the rest of the hub never touches `ws` directly.
  */
 export class Session {
+  /** Unique per connection — same name, different id ⇒ a duplicate/orphan. */
+  readonly id = nextSessionId++;
+  /** Wall-clock connect time (ms), for the roster's uptime column. */
+  readonly connectedAt = Date.now();
+
   constructor(
     readonly agent: string,
     private readonly ws: WebSocket,

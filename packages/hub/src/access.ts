@@ -12,6 +12,7 @@ export const KNOWN_COMMANDS = new Set([
   "config",
   "set",
   "unset",
+  "who",
 ]);
 
 export interface ParsedCommand {

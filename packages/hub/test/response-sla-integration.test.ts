@@ -128,6 +128,51 @@ describe("response SLA (durable backstop)", () => {
     expect(adapter.sent.some((s) => s.out.text.includes("unanswered"))).toBe(false);
   });
 
+  it("does not arm an ack-of-the-ack watch when a reply answers the peer it tags (#100)", async () => {
+    const { adapter, url, sched } = await startHub();
+    const infra = attach(url, "re-infra");
+    const gitops = attach(url, "re-gitops");
+    await waitFor(() => infra.registered() && gitops.registered());
+
+    // gitops asks infra → watch gitops→infra
+    gitops.client.sendReply({ room: "-100", text: "what's the egress IP?", mentions: ["re-infra"] });
+    await waitFor(() => infra.injected.length >= 1);
+
+    // infra answers AND tags gitops back (so gitops sees the answer). This closes
+    // gitops→infra; it must NOT arm a fresh infra→gitops watch (the ping-pong).
+    infra.client.sendReply({ room: "-100", text: "1.2.3.4 — all set?", mentions: ["re-gitops"] });
+    await waitFor(() => gitops.injected.length >= 1);
+
+    sched.flush(); // would-be T1
+    sched.flush(); // would-be T2
+    await delay(30);
+    // no "still waiting" nag to gitops, no escalation — the loop is broken
+    expect(gitops.injected.every((f) => !f.message.text.includes("still waiting"))).toBe(true);
+    expect(adapter.sent.some((s) => s.out.text.includes("unanswered"))).toBe(false);
+  });
+
+  it("no_reply suppresses the response watch for a tagged FYI/ack (#100)", async () => {
+    const { adapter, url, sched } = await startHub();
+    const infra = attach(url, "re-infra");
+    const gitops = attach(url, "re-gitops");
+    await waitFor(() => infra.registered() && gitops.registered());
+
+    // infra tags gitops on a status/FYI it doesn't expect a reply to
+    infra.client.sendReply({
+      room: "-100",
+      text: "FYI PR #123 is up, no action needed",
+      mentions: ["re-gitops"],
+      noReply: true,
+    });
+    await waitFor(() => gitops.injected.length >= 1); // gitops still SEES it
+
+    sched.flush(); // would-be T1
+    sched.flush(); // would-be T2
+    await delay(30);
+    expect(gitops.injected.every((f) => !f.message.text.includes("still waiting"))).toBe(true);
+    expect(adapter.sent.some((s) => s.out.text.includes("unanswered"))).toBe(false);
+  });
+
   it("still escalates after the asker's session has gone (durable net)", async () => {
     const { adapter, url, sched } = await startHub();
     const infra = attach(url, "re-infra");

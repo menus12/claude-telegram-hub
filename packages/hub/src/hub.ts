@@ -48,6 +48,17 @@ function quote(text: string, max = 80): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
+/** Compact human duration for the `/who` roster: `45s`, `12m`, `3h4m`, `2d1h`. */
+function humanizeDuration(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h${m % 60}m`;
+  return `${Math.floor(h / 24)}d${h % 24}h`;
+}
+
 /**
  * The always-on hub core. Owns the agent registry and the session server, and
  * wires the (single) transport adapter to routing:
@@ -75,6 +86,9 @@ export class Hub {
   // The most recent inbound the hub injected into each agent, so `ttsAuto:
   // reply-to-voice` can tell whether a reply answers an operator voice note (#88).
   private readonly lastInboundTo = new Map<string, { room: string; human: boolean; voice: boolean }>();
+  // Rejected duplicate registrations per agent name, surfaced in `/who` so a name
+  // being claimed by a second (orphan) connection is diagnosable in-chat (#99).
+  private readonly dupRejections = new Map<string, { count: number; lastAt: number }>();
   private started = false;
 
   constructor(private readonly deps: HubDeps) {
@@ -121,7 +135,11 @@ export class Hub {
       onDetach: (agent) => {
         if (this.effective("presence")) this.presence.onDetach(agent);
       },
-      onDuplicateRejected: (agent) => this.notify(duplicateRegistrationNotice(agent)),
+      onDuplicateRejected: (agent) => {
+        const prev = this.dupRejections.get(agent);
+        this.dupRejections.set(agent, { count: (prev?.count ?? 0) + 1, lastAt: Date.now() });
+        this.notify(duplicateRegistrationNotice(agent));
+      },
       duplicateName: deps.config.duplicateName,
       keepaliveMs: deps.config.keepaliveMs,
       // Advertise voice-reply capability so the channel can tell a sending agent
@@ -313,6 +331,9 @@ export class Hub {
         );
         return;
       }
+      case "who":
+        this.replyNotice(room, this.renderRoster());
+        return;
       case "allowlist":
         this.replyNotice(room, `Allowed: ${this.access.listAllowed().join(", ") || "(none)"}`);
         return;
@@ -337,6 +358,34 @@ export class Hub {
         return;
       }
     }
+  }
+
+  /**
+   * Render the live-session roster for `/who` (#99): every registered agent with
+   * its session id and uptime, so a duplicate/orphaned connection (same name, a
+   * different id) is visible in-chat. Names with rejected duplicate registrations
+   * are flagged — that's the fingerprint of a second connection fighting for a name.
+   */
+  private renderRoster(): string {
+    const now = Date.now();
+    const entries = this.registry.entries().sort((a, b) => a.agent.localeCompare(b.agent));
+    const lines = entries.map((e) => {
+      const dup = this.dupRejections.get(e.agent);
+      const flag = dup ? ` ⚠️ ${dup.count} duplicate reg${dup.count === 1 ? "" : "s"} rejected` : "";
+      return `• ${e.agent} — session #${e.id}, up ${humanizeDuration(now - e.connectedAt)}${flag}`;
+    });
+    // Rejected duplicates for names with no live session (the incumbent died and
+    // nobody re-attached) are worth showing too — they explain a "missing" agent.
+    const liveNames = new Set(entries.map((e) => e.agent));
+    const ghosts = [...this.dupRejections.keys()].filter((n) => !liveNames.has(n)).sort();
+    for (const n of ghosts) {
+      const dup = this.dupRejections.get(n);
+      lines.push(`• ${n} — no live session, but ${dup?.count} duplicate reg(s) were rejected ⚠️`);
+    }
+    return [
+      `Live sessions (${entries.length}):`,
+      ...(lines.length ? lines : ["(none connected)"]),
+    ].join("\n");
   }
 
   /** Render the effective value of every runtime-tunable setting for `/config`. */
@@ -722,7 +771,9 @@ export class Hub {
   private onReply(agent: string, reply: ReplyFrame): void {
     // 0) The speaker just produced a reply → satisfy any SLA ask that was waiting
     // on it in this room (an ETA ack and a full answer both count as "spoke").
-    this.sla.onAgentSpoke(reply.room, agent);
+    // `answered` is the peers this reply just closed an ask for — so we don't turn
+    // right around and arm an ack-of-the-ack watch when it tags them back (#100).
+    const answered = this.sla.onAgentSpoke(reply.room, agent);
 
     // 1) Post the human-visible copy — a captioned voice note if the agent asked
     // (and it's speakable), otherwise text.
@@ -788,11 +839,16 @@ export class Hub {
       void this.routeToMentioned(reinjected).catch((err: unknown) => {
         this.deps.logger("warn", "re-injection failed", { error: String(err) });
       });
-      // Watch each delivered ask (peer online) for a response. Offline peers
-      // already got an immediate in-room notice, so there's nothing to wait on.
-      for (const peer of peers) {
-        if (this.effective("sla") && this.registry.has(peer)) {
-          this.sla.openAsk({ room: reply.room, from: agent, to: peer, text: reply.text });
+      // Watch each delivered ask (peer online) for a response, unless the sender
+      // marked it `no_reply` (an ack / FYI tagged only for visibility) or this reply
+      // just answered that peer — either way a response watch would be the ack-of-
+      // the-ack nag (#100). Offline peers already got an in-room notice; nothing to
+      // wait on there.
+      if (this.effective("sla") && !reply.noReply) {
+        for (const peer of peers) {
+          if (this.registry.has(peer) && !answered.includes(peer)) {
+            this.sla.openAsk({ room: reply.room, from: agent, to: peer, text: reply.text });
+          }
         }
       }
       if (decision.froze) {
@@ -832,12 +888,25 @@ export class Hub {
         human: message.fromKind === "human",
         voice: message.voice === true,
       });
-      this.deps.logger("debug", "injected inbound", {
-        agent,
-        room: message.room,
-        fromKind: message.fromKind,
-        hasFile: file !== undefined,
-      });
+      // Per-recipient delivery receipt. For an agent→agent hop this is info-level so
+      // "the reply was ACKed by the hub but did it reach peer X?" is answerable from
+      // the logs (session #id pins which connection got it, vs an orphan) (#99).
+      if (message.fromKind === "agent") {
+        this.deps.logger("info", "agent→agent delivered", {
+          from: message.fromId,
+          to: agent,
+          session: session.id,
+          room: message.room,
+          hasFile: file !== undefined,
+        });
+      } else {
+        this.deps.logger("debug", "injected inbound", {
+          agent,
+          room: message.room,
+          fromKind: message.fromKind,
+          hasFile: file !== undefined,
+        });
+      }
     }
   }
 }

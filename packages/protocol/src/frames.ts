@@ -47,6 +47,14 @@ export const replyFrameSchema = z.object({
    * subject to the length/speakability guards; `text` remains the caption. (#68)
    */
   voiceText: z.string().optional(),
+  /**
+   * Mark this message as expecting no response, so the hub does NOT arm a response
+   * watch (`HUB_SLA`) for the peers it mentions. Delivery is mention-only, so an
+   * agent must tag a peer for it to *see* a status/FYI or a closing acknowledgement
+   * — but that shouldn't demand a reply. `no_reply` decouples "tag for visibility"
+   * from "tag as an act-request", ending the ack-of-the-ack ping-pong. (#100/#99)
+   */
+  noReply: z.boolean().optional(),
 });
 export type ReplyFrame = z.infer<typeof replyFrameSchema>;
 

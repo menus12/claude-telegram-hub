@@ -20,6 +20,8 @@ export interface ReplyInput {
   voice?: boolean;
   /** Distinct words to speak (vs the displayed `text`), when `voice` is set. */
   voiceText?: string;
+  /** Tag peers for visibility without arming a response watch (acks / FYIs). (#100) */
+  noReply?: boolean;
 }
 
 export interface SendFileInput {
@@ -94,6 +96,7 @@ export class HubClient implements HubLike {
       ...(reply.replyToId ? { replyToId: reply.replyToId } : {}),
       ...(reply.voice !== undefined ? { voice: reply.voice } : {}),
       ...(reply.voiceText ? { voiceText: reply.voiceText } : {}),
+      ...(reply.noReply ? { noReply: reply.noReply } : {}),
     });
   }
 
