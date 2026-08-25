@@ -67,12 +67,16 @@ curl localhost:8787/readyz    # -> ready
 
 ## 2. Install the channel plugin (once per machine)
 
+> **Prerequisite — Node ≥22 on the agent host.** The host runs **Claude Code**, whose CLI requires **Node ≥22**; the packages' `engines: ">=18.18"` is the *build* floor for the hub/channel, **not** the agent-runtime floor. The effective requirement for a session host is `max(build ≥18.18, Claude Code ≥22)` = **Node 22**. Watch out: `npm` reports the Claude Code engine mismatch as an `EBADENGINE` **warning**, not an error, and `claude --version` still prints — so a Node-20 host *looks* fine but fails at runtime. Debian 13 (trixie) ships Node **20** in `apt`, which is **insufficient** — install Node 22 from the official [nodejs.org](https://nodejs.org/en/download) tarball (verify against `SHASUMS256.txt`) or nodesource, not distro `apt`.
+
 ```sh
 npm run build -w @claude-telegram-hub/channel
 claude plugin marketplace add /path/to/claude-telegram-hub
 claude plugin install telegram-hub@claude-telegram-hub
 claude plugin list        # -> telegram-hub@claude-telegram-hub  ✔ enabled
 ```
+
+> **Low-memory / slow-storage hosts (e.g. an ARM SBC):** the built plugin is a single bundled `dist/main.cjs` with **no runtime `node_modules`** (deps are inlined at build; only ws's optional native accelerators are external and ws runs without them). So you can build it on a beefier machine and ship just `dist/` + `.claude-plugin/` + `.mcp.json` to the host — no `npm ci`/build there, avoiding the memory peak and the slow many-small-files unpack on eMMC. The host then needs only the Node 22 runtime.
 
 The marketplace points at this repo (`.claude-plugin/marketplace.json`); the plugin's server is `plugin:telegram-hub:telegram-hub`.
 
