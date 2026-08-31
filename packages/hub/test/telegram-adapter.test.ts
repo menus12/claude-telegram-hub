@@ -242,6 +242,33 @@ describe("TelegramAdapter", () => {
     expect(caption.endsWith("…")).toBe(true); // body truncated with an ellipsis
   });
 
+  it("posts the full text as a threaded follow-up when a voiced reply overflows the caption", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    const longText = "L".repeat(2000);
+    await adapter.sendVoice(
+      { adapter: "telegram", room: "-100" },
+      { agent: "platform", audio: Buffer.from("OGG"), mimeType: "audio/ogg", text: longText },
+    );
+    // voice note keeps a truncated caption (Telegram's 1024 cap)
+    expect((api.sentFiles[0].opts?.caption ?? "").length).toBeLessThanOrEqual(1024);
+    // and the FULL attributed text lands as a follow-up, threaded to the voice note
+    expect(api.sent).toHaveLength(1);
+    expect(api.sent[0].text).toBe(`platform ▸ ${longText}`);
+    expect(api.sent[0].opts?.replyToMessageId).toBe(api.sentFiles[0].messageId);
+  });
+
+  it("posts no follow-up for a short voiced reply that fits the caption", async () => {
+    const api = new FakeTelegramApi();
+    const adapter = new TelegramAdapter({ api, tagSigil: "@" });
+    await adapter.sendVoice(
+      { adapter: "telegram", room: "-100" },
+      { agent: "platform", audio: Buffer.from("OGG"), mimeType: "audio/ogg", text: "all green" },
+    );
+    expect(api.sentFiles[0].opts?.caption).toBe("platform ▸ all green");
+    expect(api.sent).toHaveLength(0); // full text already in the caption — no follow-up
+  });
+
   it("keeps the operator @mention whole when truncating a long caption (#94)", async () => {
     const api = new FakeTelegramApi();
     const adapter = new TelegramAdapter({ api, tagSigil: "@" });
