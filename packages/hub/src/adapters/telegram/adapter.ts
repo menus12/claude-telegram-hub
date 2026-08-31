@@ -183,6 +183,18 @@ export class TelegramAdapter implements TransportAdapter {
     );
     // Index it so a reply to the voice note routes back to the speaking agent.
     if (sentId !== undefined) this.replies.record(target.room, sentId, out.agent);
+
+    // When the attributed text overflows the caption (Telegram caps a voice-note
+    // caption at 1024), post the FULL text as a threaded follow-up message — so a
+    // long spoken reply isn't cut to a truncated caption; the operator gets the
+    // complete text to read. Plain messages allow up to 4096 chars.
+    const overflows = `${attributionPrefix(out.agent)}${out.text}${mention.plain}`.length > CAPTION_MAX;
+    if (overflows && sentId !== undefined) {
+      const fullText = `${attributionPrefix(out.agent)}${out.text}`;
+      const body = fullText.length > MESSAGE_MAX ? `${fullText.slice(0, MESSAGE_MAX - 1)}…` : fullText;
+      const followId = await this.opts.api.sendMessage(target.room, body, { replyToMessageId: sentId });
+      if (followId !== undefined) this.replies.record(target.room, followId, out.agent);
+    }
   }
 
   async stop(): Promise<void> {
@@ -338,6 +350,8 @@ function annotate(text: string, note: string): string {
 
 /** Telegram's hard limit on a media (voice/photo/document) caption. */
 const CAPTION_MAX = 1024;
+/** Telegram's hard limit on a plain text message (the full-text voice follow-up). */
+const MESSAGE_MAX = 4096;
 
 /**
  * Build a voice-note caption within Telegram's 1024-char cap: keep the attribution

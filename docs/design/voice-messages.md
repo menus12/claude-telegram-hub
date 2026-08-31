@@ -92,7 +92,9 @@ for?" notice). Consistent with explicit-mention-only routing.
   force a confirm for voice-driven destructive ops; default off.
 - **S5 — Agent voice reply (TTS, phase 2, opt-in).** Text is **always** posted (the source of truth);
   TTS is a supplementary rendering of **short** messages for a hands-free operator, never voice-only
-  (code/links/lists don't work as audio; Part A: depth goes in the artifact).
+  (code/links/lists don't work as audio; Part A: depth goes in the artifact). The text rides in the
+  voice-note caption; when it exceeds Telegram's 1024-char caption cap it's posted **in full as a
+  threaded follow-up message** so a long spoken reply is never truncated to a partial caption.
 - **S6 — Agent↔agent stays text.** Voice is a human-edge modality only; agent→agent remains text
   re-injection bounded by the governor.
 
