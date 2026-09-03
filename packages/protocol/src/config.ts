@@ -123,16 +123,6 @@ export const hubConfigSchema = z.object({
    * as ordinary agent names. Agents can't broadcast regardless.
    */
   broadcast: z.boolean().default(true),
-  /**
-   * Broadcast operator/human messages to every live agent regardless of the
-   * `@mention` set — a delivery fix (#109) so operator directives/GOs aren't
-   * lost to un-`@mentioned` agents under explicit-mention-only routing (a
-   * no-mention human message is otherwise dropped; a subset-`@mention` reaches
-   * only that subset). Off by default (backward-compatible). Human-origin only;
-   * agent↔agent routing is unchanged. Distinct from `broadcast`, which gates the
-   * explicit `@all` token — this fans *every* human message.
-   */
-  operatorBroadcast: z.boolean().default(false),
   /** Announce agent online/offline in the configured rooms. Off by default. */
   presence: z.boolean().default(false),
   /**
@@ -271,7 +261,6 @@ export const HUB_ENV = {
   rooms: "HUB_ROOMS",
   hopBudget: "HUB_HOP_BUDGET",
   broadcast: "HUB_BROADCAST",
-  operatorBroadcast: "HUB_OPERATOR_BROADCAST",
   presence: "HUB_PRESENCE",
   presenceGraceMs: "HUB_PRESENCE_GRACE_MS",
   sla: "HUB_SLA",
@@ -315,7 +304,6 @@ export function loadHubConfig(env: Env): HubConfig {
       rooms: csv(env[HUB_ENV.rooms]),
       hopBudget: num(env[HUB_ENV.hopBudget]),
       broadcast: bool(env[HUB_ENV.broadcast]),
-      operatorBroadcast: bool(env[HUB_ENV.operatorBroadcast]),
       presence: bool(env[HUB_ENV.presence]),
       presenceGraceMs: num(env[HUB_ENV.presenceGraceMs]),
       sla: bool(env[HUB_ENV.sla]),
