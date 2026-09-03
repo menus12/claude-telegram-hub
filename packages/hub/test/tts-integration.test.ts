@@ -406,6 +406,20 @@ describe("voiced replies (TTS)", () => {
     expect(adapter.sent).toHaveLength(1);
   });
 
+  it("does not offline-notice @operator when tagged alongside a live peer", async () => {
+    const { adapter, url } = await startHub();
+    const a = attach(url, "platform");
+    const b = attach(url, "kb");
+    await waitFor(() => a.registered() && b.registered());
+
+    // reply tags a real peer AND @operator — the peer must get the hop, and @operator
+    // must NOT produce a spurious "operator is not connected" offline notice.
+    a.client.sendReply({ room: "-100", text: "done — kb, take over", mentions: ["kb", "operator"] });
+    await waitFor(() => b.injected() >= 1);
+    await delay(20);
+    expect(adapter.sent.some((s) => s.out.text.includes("@operator is not connected"))).toBe(false);
+  });
+
   it("@operator carries the configured operator @username (breaks a muted chat) (#94)", async () => {
     const { adapter, url } = await startHub(undefined, undefined, {
       HUB_OPERATOR_USERNAMES: "@a_gorbachev",
