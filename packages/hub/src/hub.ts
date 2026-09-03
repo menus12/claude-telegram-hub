@@ -572,6 +572,25 @@ export class Hub {
       });
     }
 
+    // Operator-broadcast (delivery fix, #109): when enabled, EVERY human message
+    // fans to every live agent regardless of its `@mention` set — so an operator
+    // directive/GO reaches all agents even with no tag (otherwise dropped below)
+    // or a subset tag (otherwise only that subset). Human-origin only; agent↔agent
+    // routing is untouched. Explicit names are preserved via the union.
+    if (
+      message.fromKind === "human" &&
+      this.effective("operatorBroadcast") &&
+      !this.hasBroadcast(message.mentions)
+    ) {
+      const before = message.mentions.length;
+      message.mentions = [...new Set([...this.registry.list(), ...message.mentions])];
+      this.deps.logger("info", "operator-broadcast fanned human message to live agents", {
+        room: message.room,
+        explicit: before,
+        recipients: message.mentions.length,
+      });
+    }
+
     // Explicit-mention-only routing: untagged chatter is not injected.
     if (message.mentions.length === 0) {
       this.deps.logger("debug", "no mentions; not routing", { room: message.room });
