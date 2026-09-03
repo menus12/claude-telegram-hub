@@ -872,6 +872,10 @@ export class Hub {
   private async routeToMentioned(message: InboundMessage, file?: FilePayload): Promise<void> {
     for (const agent of message.mentions) {
       if (message.fromKind === "agent" && agent === message.fromId) continue;
+      // `operator`/`op` address the human (rendered as a mention in the visible copy),
+      // not a routable agent — skip, or they produce a spurious "operator has no live
+      // session" offline notice when tagged alongside real peers.
+      if (isOperatorMention(agent)) continue;
       const session = this.registry.get(agent);
       if (!session) {
         this.deps.logger("info", "tagged agent has no live session", { agent });
