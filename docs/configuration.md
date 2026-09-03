@@ -19,6 +19,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_ROOMS` | csv | `[]` | Group room ids the hub operates in. Empty is valid (DM-only). |
 | `HUB_HOP_BUDGET` | int | `6` | Coordination-thread hops before agent→agent routing freezes. |
 | `HUB_BROADCAST` | bool | `true` | Operator `@all`/`@everyone`/`@team` expands to every live agent. Off → treated as ordinary names. Agents can't broadcast regardless. |
+| `HUB_OPERATOR_BROADCAST` | bool | `false` | Fan **every** operator/human message to all live agents, regardless of its `@mention` set — a delivery fix so operator directives/GOs aren't lost to un-`@mentioned` agents (a no-mention human message is otherwise dropped; a subset tag reaches only that subset). Human-origin only; agent↔agent routing is unchanged. Distinct from `HUB_BROADCAST` (which gates the explicit `@all` token). `/set operatorbroadcast on\|off` at runtime. |
 | `HUB_PRESENCE` | bool | `false` | Announce `@agent online/offline`. Opt-in. Accepts `on/off`, `true/false`, `1/0`, `yes/no`. |
 | `HUB_NOTIFY` | enum | `dm` | Where hub-wide notices (presence, duplicate-registration) go: `dm` (admins' DMs — works with no group), `rooms` (`HUB_ROOMS`), or `both`. |
 | `HUB_PRESENCE_GRACE_MS` | int | `10000` | Grace window a dropped session may reconnect within before it's announced offline (absorbs restart churn). |
