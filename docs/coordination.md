@@ -101,8 +101,13 @@ and fast convergence.
 5. **Cross-repo work goes through issues; the room is only a doorbell.** The moment your task needs
    another repo to change, **file an issue there** (context, concrete ask, acceptance criteria),
    then post a one-line signal: `@peer — filed <repo>#N (<what/why>), over to you.` The peer works
-   it through its normal branch → PR → review flow. Each repo changes only its own files. Keep room
-   traffic to signals — *filed #N → PR up → merged* — never restate or debate the issue in chat.
+   it through its normal branch → PR → review flow, and **all technical detail, review, and debate
+   live in the issue/PR** — a question about the work, a review comment, a design point goes as a
+   comment *there*, not in the room. Each repo changes only its own files. Keep room traffic to
+   signals — *filed #N → PR up → PR ready for review → merged* — and **never paste long technical
+   content into the hub** (logs, diffs, configs, code blocks, multi-paragraph analysis): that depth
+   belongs in the linked artifact. The hub is a **signaling bus** — it shows the operator that work
+   is moving and lets them ask status; it is not where the work is done or read.
 
 6. **Match verbosity to the medium.** Chat replies are short and dense; put depth in the artifact
    you link (issue / PR / file). One question tagged at several agents → each answers only for its

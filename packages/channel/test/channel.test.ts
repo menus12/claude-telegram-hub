@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   buildChannel,
   buildInboundNotification,
+  buildInstructions,
   parseReplyArgs,
   parseSendFileArgs,
 } from "../src/index.js";
@@ -424,6 +425,17 @@ describe("MCP wiring (in-memory)", () => {
     }
 
     await channel.mcp.close();
+  });
+});
+
+describe("buildInstructions", () => {
+  it("injects the signaling-bus doctrine into every session (single- and multi-hub)", () => {
+    for (const labels of [["hub"], ["learn", "cheburnet"]]) {
+      const text = buildInstructions(labels);
+      expect(text).toContain("SIGNALING BUS"); // hub is for signals, not the work
+      expect(text).toMatch(/file a GitHub issue/i); // cross-repo work → issue there
+      expect(text).toMatch(/NEVER paste long technical content/i); // no copy-paste dumps
+    }
   });
 });
 
