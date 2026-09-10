@@ -8,7 +8,7 @@ import {
   voiceUnaddressedNotice,
   voiceUnclearNotice,
 } from "@claude-telegram-hub/protocol";
-import { isBroadcastMention, isOperatorMention, speakableText } from "@claude-telegram-hub/protocol";
+import { isBroadcastMention, isOperatorMention, parseMentions, speakableText } from "@claude-telegram-hub/protocol";
 import { resolveSpokenRecipients } from "./voice-routing.js";
 import { pickVoice } from "./voice-lang.js";
 import type {
@@ -711,11 +711,15 @@ export class Hub {
       this.deps.logger("warn", "adapter sendFile failed", { error: String(err) });
     });
 
-    // 2) Agent→agent: hand the bytes to any tagged peers. `operator`/broadcast address
-    // the human/room, not a peer, so they're dropped from the re-injection set.
+    // 2) Agent→agent: hand the bytes to any tagged peers — from the structured
+    // `mentions` field AND any `@name` parsed from the caption (symmetric with a
+    // text reply; see onReply). `operator`/broadcast address the human/room, not a
+    // peer, so they're dropped from the re-injection set.
+    const caption = frame.caption ?? "";
+    const tagged = [...new Set([...frame.mentions, ...parseMentions(caption, this.deps.config.tagSigil)])];
     const mentions = this.effective("broadcast")
-      ? frame.mentions.filter((m) => !isBroadcastMention(m))
-      : frame.mentions;
+      ? tagged.filter((m) => !isBroadcastMention(m))
+      : tagged;
     const peers = mentions.filter((m) => m !== agent && !isOperatorMention(m));
     if (peers.length === 0) return;
 
@@ -791,9 +795,17 @@ export class Hub {
     // it; the human already sees the visible copy posted above. Broadcast is an
     // operator-only primitive — drop any broadcast token from an agent's mentions
     // so a single reply can't fan out to the whole room.
+    //
+    // Also parse `@name` tokens from the reply TEXT and union them with the
+    // structured `mentions` field: an agent that writes "@peer" in prose expects
+    // it to reach that peer — symmetric with a human message (whose @tags the
+    // adapter parses). Without this, a reply that tags in text but leaves the
+    // structured field empty posts a visible copy but silently never routes to the
+    // peer — the "agents don't hear each other" class of missed delivery.
+    const tagged = [...new Set([...reply.mentions, ...parseMentions(reply.text, this.deps.config.tagSigil)])];
     const mentions = this.effective("broadcast")
-      ? reply.mentions.filter((m) => !isBroadcastMention(m))
-      : reply.mentions;
+      ? tagged.filter((m) => !isBroadcastMention(m))
+      : tagged;
     // `operator` addresses the human (rendered as a mention in the visible copy),
     // not a peer agent — keep it out of agent re-injection (#94).
     const peers = mentions.filter((m) => m !== agent && !isOperatorMention(m));

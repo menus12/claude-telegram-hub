@@ -82,7 +82,9 @@ and fast convergence.
      `no_reply` for anything that isn't itself an answer.)
    - **Address a peer by its exact registered agent name** — the `from_id`/name you've actually seen,
      never a guess. A mistyped handle routes nowhere (it falls through as plain text; the peer never
-     gets a notification).
+     gets a notification). A correct `@name` **in your reply text routes to that peer** (the hub
+     parses it, symmetric with a human message) — but the structured `mentions` field is the reliable
+     way; set it when delivery matters.
    - **To reach the human operator, use `@operator`** (`mentions: ["operator"]`) — and *only* when you
      genuinely need a decision. The hub turns it into a real Telegram mention that notifies the operator
      even in a muted chat (when the deployment sets `HUB_OPERATOR_USERNAMES`, a real `@username` mention

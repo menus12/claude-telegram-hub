@@ -107,6 +107,24 @@ describe("group routing + agent↔agent coordination", () => {
     expect(sent.target.room).toBe("-100");
   });
 
+  it("routes an agent reply that tags a peer in TEXT only (empty mentions field)", async () => {
+    // The "agents don't hear each other" bug: an agent writes "@peer" in prose but
+    // leaves the structured `mentions` field empty. The hub must parse the text @tag
+    // and route it (symmetric with a human message), not just post a visible copy.
+    const { url } = await startHub();
+    const infra = attach(url, "re-infra");
+    const gitops = attach(url, "re-gitops");
+    await waitFor(() => infra.registered() && gitops.registered());
+
+    // gitops "approves", tagging re-infra ONLY in the text — no mentions field.
+    gitops.client.sendReply({ room: "-100", text: "@re-infra approved — merge it" });
+
+    // re-infra still receives it via re-injection (the fix), not just a visible copy.
+    await waitFor(() => infra.injected.length >= 1);
+    expect(infra.injected[0].message.fromId).toBe("re-gitops");
+    expect(infra.injected[0].message.text).toContain("approved");
+  });
+
   it("does not re-inject a reply to the replying agent itself (self-tag)", async () => {
     const { adapter, url } = await startHub();
     const infra = attach(url, "re-infra");
