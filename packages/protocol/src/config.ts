@@ -189,6 +189,11 @@ export const hubConfigSchema = z.object({
   sttApiKey: z.string().min(1).optional(),
   /** STT auth header name; override to `api-key` for Azure OpenAI. */
   sttAuthHeader: z.string().min(1).optional(),
+  /**
+   * STT request timeout in ms. A self-hosted CPU Whisper needs roughly 0.5x the
+   * note's duration, so long voice notes need more than the 60s default.
+   */
+  sttTimeoutMs: z.number().int().positive().default(60_000),
   /** Echo a voice note's transcript (and resolved recipients) into the room. */
   voiceEcho: z.boolean().default(true),
   /**
@@ -277,6 +282,7 @@ export const HUB_ENV = {
   sttLang: "HUB_STT_LANG",
   sttApiKey: "HUB_STT_API_KEY",
   sttAuthHeader: "HUB_STT_AUTH_HEADER",
+  sttTimeoutMs: "HUB_STT_TIMEOUT_MS",
   voiceEcho: "HUB_VOICE_ECHO",
   ttsUrl: "HUB_TTS_URL",
   ttsModel: "HUB_TTS_MODEL",
@@ -320,6 +326,7 @@ export function loadHubConfig(env: Env): HubConfig {
       sttLang: env[HUB_ENV.sttLang],
       sttApiKey: env[HUB_ENV.sttApiKey],
       sttAuthHeader: env[HUB_ENV.sttAuthHeader],
+      sttTimeoutMs: num(env[HUB_ENV.sttTimeoutMs]),
       voiceEcho: bool(env[HUB_ENV.voiceEcho]),
       ttsUrl: env[HUB_ENV.ttsUrl],
       ttsModel: env[HUB_ENV.ttsModel],

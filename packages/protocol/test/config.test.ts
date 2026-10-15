@@ -37,6 +37,7 @@ describe("loadHubConfig", () => {
     expect(cfg.sttApiKey).toBeUndefined();
     expect(cfg.ttsApiKey).toBeUndefined();
     expect(cfg.sttAuthHeader).toBeUndefined();
+    expect(cfg.sttTimeoutMs).toBe(60_000);
     expect(cfg.tagSigil).toBe("@");
     expect(cfg.bindHost).toBe("127.0.0.1");
     expect(cfg.bindPort).toBe(8787);
@@ -109,6 +110,8 @@ describe("loadHubConfig", () => {
     });
     expect(cloud.sttApiKey).toBe("sk-abc");
     expect(cloud.sttAuthHeader).toBe("api-key");
+    expect(loadHubConfig({ ...minimal, HUB_STT_TIMEOUT_MS: "600000" }).sttTimeoutMs).toBe(600_000);
+    expect(() => loadHubConfig({ ...minimal, HUB_STT_TIMEOUT_MS: "0" })).toThrow(/sttTimeoutMs/);
     expect(() => loadHubConfig({ ...minimal, HUB_STT_URL: "not-a-url" })).toThrow(/sttUrl/);
   });
 
