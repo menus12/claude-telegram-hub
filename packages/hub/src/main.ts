@@ -30,6 +30,7 @@ function buildAdapter(
             defaultLang: cfg.sttLang,
             ...(cfg.sttApiKey ? { apiKey: cfg.sttApiKey } : {}),
             ...(cfg.sttAuthHeader ? { authHeader: cfg.sttAuthHeader } : {}),
+            timeoutMs: cfg.sttTimeoutMs,
             logger: log,
           })
         : undefined;

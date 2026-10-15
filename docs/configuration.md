@@ -35,6 +35,7 @@ Transport-agnostic. The hub image reads these regardless of which adapter is act
 | `HUB_STT_LANG` | string | `auto` | STT language: `auto` (detect) or an ISO code (`ru`, `en`). |
 | `HUB_STT_API_KEY` | string | — | API key for a cloud STT service (sent as `Authorization: Bearer …`). |
 | `HUB_STT_AUTH_HEADER` | string | `Authorization` | Auth header name; set to `api-key` for Azure OpenAI. |
+| `HUB_STT_TIMEOUT_MS` | int | `60000` | STT request timeout. Raise it for self-hosted CPU Whisper and long notes (it needs roughly 0.5x the audio duration), e.g. `600000`. |
 | `HUB_VOICE_ECHO` | bool | `true` | Echo a voice note's transcript + resolved recipients into the room (`🎙️ heard → @…`). |
 | `HUB_TTS_URL` | url | — | Text-to-speech service base URL (OpenAI-compatible `POST /v1/audio/speech`). Unset = agents can't reply with voice. (Phase 2 — see [design/voice-messages.md](design/voice-messages.md).) |
 | `HUB_TTS_MODEL` | string | — | TTS model id (server-specific). Required when `HUB_TTS_URL` is set. |

@@ -153,6 +153,7 @@ also exposes an OpenAI-compatible **`/openai/v1/…`** surface that accepts
 | `HUB_STT_LANG` | `auto` | `auto` (detect) or `ru` / `en`. |
 | `HUB_STT_API_KEY` | — | Cloud STT key (`Authorization: Bearer …` by default). |
 | `HUB_STT_AUTH_HEADER` | `Authorization` | Auth header name; `api-key` for Azure OpenAI. |
+| `HUB_STT_TIMEOUT_MS` | `60000` | Request timeout. A CPU Whisper takes roughly 0.5x the note's duration, so for long notes set e.g. `600000` (10 min). |
 | `HUB_VOICE_ECHO` | `true` | Echo `🎙️ heard → @…: "transcript"` into the room. |
 | `HUB_TTS_URL` | — | TTS base URL (or full endpoint). Unset = agents can't reply with voice. |
 | `HUB_TTS_MODEL` | — | TTS model id (required with `HUB_TTS_URL`). |
