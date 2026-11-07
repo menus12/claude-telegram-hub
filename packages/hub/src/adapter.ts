@@ -11,7 +11,22 @@ import type {
  * accompanying `file` (an operator photo/document) is passed alongside the
  * message; the hub streams the bytes on to the tagged session's channel.
  */
-export type Inbox = (message: InboundMessage, file?: FilePayload) => Promise<void>;
+export type Inbox = (message: InboundMessage, file?: FilePayload, meta?: InboundMeta) => Promise<void>;
+
+/**
+ * Adapter-side facts about an inbound message that the hub needs but that never
+ * travel to a session (so they aren't part of the wire `InboundMessage`).
+ */
+export interface InboundMeta {
+  /** The message was forwarded (it carries no address of its own) (#109). */
+  forwarded?: boolean;
+  /**
+   * Why a voice note's transcript is empty when transcription itself failed
+   * (timeout, STT error, download failure) — as opposed to a clean but empty
+   * transcript (silence/noise). Lets the hub say "transcription failed" (#109).
+   */
+  transcriptionError?: string;
+}
 
 /**
  * A voiced reply: synthesized audio plus the speaking agent and the full reply

@@ -46,6 +46,7 @@ export class GrammyApi implements TelegramApi {
         ...(m.caption !== undefined ? { caption: m.caption } : {}),
         ...(attachment ? { attachment } : {}),
         ...(droppedMedia ? { droppedMedia } : {}),
+        ...(m.forward_origin ? { forwarded: true } : {}),
         ...(m.voice
           ? {
               voice: {

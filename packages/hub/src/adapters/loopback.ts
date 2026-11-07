@@ -5,7 +5,7 @@ import type {
   OutboundMessage,
   RouteTarget,
 } from "@claude-telegram-hub/protocol";
-import type { Inbox, OutboundVoice, TransportAdapter } from "../adapter.js";
+import type { Inbox, InboundMeta, OutboundVoice, TransportAdapter } from "../adapter.js";
 
 export interface SentMessage {
   target: RouteTarget;
@@ -73,9 +73,9 @@ export class LoopbackAdapter implements TransportAdapter {
   }
 
   /** Simulate a platform message arriving at the hub (optionally with a file). */
-  deliver(message: InboundMessage, file?: FilePayload): Promise<void> {
+  deliver(message: InboundMessage, file?: FilePayload, meta?: InboundMeta): Promise<void> {
     if (!this.inbox) throw new Error("loopback adapter not started");
-    return this.inbox(message, file);
+    return this.inbox(message, file, meta);
   }
 
   /** Resolve with the next outbound matching `pred` (or the next one at all). */
