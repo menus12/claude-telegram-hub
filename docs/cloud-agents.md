@@ -40,13 +40,17 @@ The bridge's MCP `instructions` (≤ 4096 chars, pinned by a test) teach the loo
   - unauthenticated requests per IP (`BRIDGE_UNAUTH_PER_MIN`, then 429), with 401s logged at most once a minute (public hostnames get scanned within seconds).
 - **Exposure:** the bridge binds inside the compose network and isn't published on the host. Only `cloudflared` reaches it. Per-IP limiting trusts `cf-connecting-ip`, which is sound only because of this, so **never publish the bridge port directly**.
 
-## Configuration (`bridge.env`)
+## Configuration
+
+The bridge process reads these variables. With `docker-compose.bridge.yml`, the overlay derives most of them:
+- `BRIDGE_HUB_SECRET` comes from the hub's `HUB_SESSION_SECRET`;
+- `bridge.env` (see `bridge.env.example`) supplies `BRIDGE_DEFAULT_ROOM` and the two secret-file paths.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `BRIDGE_HUB_URL` | — (compose: `ws://hub:8787`) | Hub session URL |
 | `BRIDGE_HUB_SECRET` | — | The hub's `HUB_SESSION_SECRET` |
-| `BRIDGE_TOKENS_FILE` | — (compose: `/run/bridge/tokens`) | `label sha256hex` lines |
+| `BRIDGE_TOKENS_FILE` | — (compose: `/run/secrets/bridge-tokens`) | `label sha256hex` lines |
 | `BRIDGE_DEFAULT_ROOM` | — | Room for join/leave notices and a first `send` |
 | `BRIDGE_BIND_HOST` / `BRIDGE_BIND_PORT` | `127.0.0.1` / `8788` | Listen address |
 | `BRIDGE_AGENT_PREFIX` | `cloud-` | Enforced name prefix |
@@ -62,23 +66,49 @@ The bridge's MCP `instructions` (≤ 4096 chars, pinned by a test) teach the loo
 | `BRIDGE_MAX_BODY_BYTES` | `65536` | Request body cap |
 | `BRIDGE_LOG_LEVEL` | `info` | |
 
-## Operator setup
+## Who does what
 
-1. **Mint a token per cloud environment** on the box. The token never goes through chat, issues or the hub.
+The design keeps Cloudflare in **one** place even with many hubs:
+
+| Role | Owns | Does | Never needs |
+|---|---|---|---|
+| **Network owner** (the team's infra agent with the Cloudflare account and zone) | CF account, DNS zone, tunnels | Creates a **remotely-managed** tunnel per project (`hub-bridge-<project>`), with public hostname `hub-bridge-<project>.<zone>` → `http://bridge:8788`. Stores the token in its secret store and writes it to the project's box (or hands it to that project's infra). Disables or rotates it on request. | the project's hub secret or bearer tokens |
+| **Project** (that machine's hub agent and/or infra agent) | the hub, the bridge, `bridge.env`, bearer tokens | Mints per-environment bearers, runs the overlay, configures the cloud environments. | any Cloudflare credentials: a tunnel token is enough to run `cloudflared` |
+| **Operator** | claude.ai cloud environments | Pastes each environment's network secret and setup script. | — |
+
+A remotely-managed tunnel's token can only run that one tunnel. It can't change DNS or create anything, so giving it to a project grants exactly one hostname's worth of exposure, and the network owner can revoke it with one click.
+
+## Set up a bridge for a hub
+
+The same steps apply to the first hub and to any other. The checklist names capabilities, not a specific deployment.
+
+**Prerequisites**
+- [ ] A hub running in compose as service `hub`. The bridge image may be newer than the hub's; they only need the same protocol major.
+- [ ] A hub agent (or the project's infra agent) on that machine to run the steps below. Cloning this repo is enough: the overlay, example env and docs are all here.
+- [ ] **Egress to the Cloudflare edge** from the machine: `198.41.192.0/24` and `198.41.200.0/24` on **TCP 7844**. `cloudflared` runs with `--protocol http2`; QUIC/UDP isn't required, and is avoided because it fails on lossy or filtered paths. If the direct path is unreliable, route those two prefixes via a working exit first.
+- [ ] A **tunnel token** from the network owner for `hub-bridge-<project>`, written to a `0600` file owned by uid 1000.
+
+**Steps**
+1. **Mint a bearer per cloud environment** on the box. It never goes through chat, issues or the hub.
    ```bash
-   umask 077; mkdir -p ~/.config/claude-telegram-hub
-   openssl rand -hex 32 | tr -d '\n' > ~/.config/claude-telegram-hub/bridge-token-testbed
-   printf 'testbed %s\n' "$(sha256sum < ~/.config/claude-telegram-hub/bridge-token-testbed | cut -d' ' -f1)" >> bridge-tokens
+   umask 077; D=~/.config/claude-telegram-hub; mkdir -p $D
+   openssl rand -hex 32 | tr -d '\n' > $D/bridge-token-<env>
+   printf '<env> %s\n' "$(sha256sum < $D/bridge-token-<env> | cut -d' ' -f1)" >> $D/bridge-tokens
    ```
-2. **Tunnel.** Infra creates a remotely-managed tunnel with public hostname `<host>` → `http://bridge:8788` and hands over the tunnel token on the box. Put it in `cloudflared.env` as `TUNNEL_TOKEN=…`.
-3. **Bridge config.** Write `bridge.env` (`BRIDGE_HUB_SECRET`, `BRIDGE_DEFAULT_ROOM`), then run `docker compose --profile bridge up -d`.
-4. **Cloud environment** (claude.ai → environment settings):
-   - **Network secret:** Bearer, host `<host>`, value = the token file's contents (read it on the box).
+2. **Configure:** `cp bridge.env.example bridge.env` and set `BRIDGE_DEFAULT_ROOM`, `BRIDGE_TOKENS_PATH` and `TUNNEL_TOKEN_PATH`.
+3. **Start** (in the hub's compose project, adding the hub's own `-f` files):
+   ```bash
+   docker compose -f <hub compose files> -f docker-compose.bridge.yml \
+     --env-file .env --env-file bridge.env up -d bridge cloudflared
+   ```
+4. **Verify:** `https://hub-bridge-<project>.<zone>/healthz` returns 200, and `/mcp` with no bearer returns 401.
+5. **Cloud environment** (claude.ai → environment settings):
+   - **Network secret:** Bearer, host `hub-bridge-<project>.<zone>`, value = the contents of `bridge-token-<env>` (read it on the box).
    - **Setup script:**
      ```bash
      #!/bin/bash
      set -euo pipefail
-     URL="https://<host>/mcp"
+     URL="https://hub-bridge-<project>.<zone>/mcp"
      mkdir -p "$HOME/.claude"
      python3 - "$URL" <<'PY'
      import json, os, sys
@@ -95,9 +125,16 @@ The bridge's MCP `instructions` (≤ 4096 chars, pinned by a test) teach the loo
      PY
      ```
 
+### Deployments
+
+| Project | Hostname | Notes |
+|---|---|---|
+| cheburnet | `hub-bridge-cheburnet.nsalab.org` | Pilot. CF edge prefixes routed via hel (cheburnet-router#605). Tunnel provisioned by cheburnet-infra (#682). |
+| second project | `hub-bridge-<project>.nsalab.org` (later) | Its box sits behind 50lo1. Before it starts, 50lo1 needs the same CF-edge routing (`xray_extra_tunnel_cidrs`, as in router#605): a router task. Its infra agent gets only the tunnel token from cheburnet-infra. |
+
 ## Token rotation and revocation
 
-The tokens file is read at start, so restart the bridge after editing it: `docker compose --profile bridge restart bridge`.
+The tokens file is read at start, so restart the bridge after editing it: `docker compose … restart bridge` (same `-f`/`--env-file` flags as step 3).
 
 **Rotate one environment** with no downtime:
 1. Mint a new token (step 1 above) and add its line under a new label, e.g. `testbed-2`. Restart the bridge; both tokens now work.
@@ -115,6 +152,6 @@ A repo's `SessionStart` hooks or `CLAUDE.md` routines (e.g. a backlog cadence) a
 ## Rollback
 
 From fastest to most complete; the hub is unaffected at every step:
-1. `docker compose --profile bridge stop`: cloud agents go offline and the hostname returns a CF error.
-2. Infra disables the tunnel or public hostname in Cloudflare.
+1. `docker compose … stop bridge cloudflared`: cloud agents go offline and the hostname returns a CF error.
+2. The network owner disables the tunnel or public hostname in Cloudflare.
 3. Remove the environment's network secret and the setup-script entry. Delete the token line from `bridge-tokens` to revoke one environment.
