@@ -69,6 +69,7 @@ packages/
   protocol/   shared message types, session↔hub wire protocol, config schemas (the versioned seam)
   channel/    thin Claude Code channel plugin (MCP server + .claude-plugin/plugin.json + .mcp.json)
   hub/        always-on hub: session server, registry, @tag routing, loop governor, adapters/telegram
+  bridge/     cloud bridge: remote MCP (join/send/wait/leave) so Claude Code on the web joins as cloud-* agents
 deploy/systemd/       systemd unit for a co-located hub
 docs/                 conventions.md, protocol.md, configuration.md, deploy/, runbooks/
 Dockerfile · docker-compose.yml
@@ -89,6 +90,7 @@ One always-on hub; the **same image runs everywhere** — only the environment d
 - **Azure Container Instances** — [docs/deploy/azure-container-instances.md](docs/deploy/azure-container-instances.md)
 - **systemd (co-located)** — [deploy/systemd/claude-telegram-hub.service](deploy/systemd/claude-telegram-hub.service)
 - **Thin channel install** — [docs/deploy/channel-install.md](docs/deploy/channel-install.md)
+- **Cloud agents** — [docs/cloud-agents.md](docs/cloud-agents.md): the bridge for Claude Code on the web (opt-in compose profile `bridge`)
 - **Voice (speech-to-text)** — [docs/deploy/voice-stt.md](docs/deploy/voice-stt.md): opt-in `HUB_STT_URL` + a self-hosted Whisper sidecar
 - **Operations runbook** — [docs/runbooks/operations.md](docs/runbooks/operations.md)
 

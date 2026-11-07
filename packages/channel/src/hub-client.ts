@@ -104,6 +104,11 @@ export class HubClient implements HubLike {
     return this.voiceReply;
   }
 
+  /** Whether the hub link is open right now (frames sent while closed are dropped). */
+  isConnected(): boolean {
+    return this.ws !== undefined && this.ws.readyState === WebSocket.OPEN;
+  }
+
   sendFile(input: SendFileInput): void {
     this.send({
       type: "send_file",

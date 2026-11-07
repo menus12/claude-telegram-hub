@@ -15,8 +15,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc -b tsconfig.build.json && npm run build -w @claude-telegram-hub/channel",
-    "clean": "tsc -b tsconfig.build.json --clean && npm run clean -w @claude-telegram-hub/channel"
+    "build": "tsc -b tsconfig.build.json && npm run build -w @claude-telegram-hub/channel && npm run build -w @claude-telegram-hub/bridge",
+    "clean": "tsc -b tsconfig.build.json --clean && npm run clean -w @claude-telegram-hub/channel && npm run clean -w @claude-telegram-hub/bridge"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
