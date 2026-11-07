@@ -81,6 +81,28 @@ describe("Telegram inbound files", () => {
     expect(received[0].message.text).toContain("too large to fetch");
   });
 
+  it("logs and annotates a media kind the hub doesn't deliver (#120)", async () => {
+    const api = new FakeTelegramApi();
+    const logs: { level: string; msg: string; fields?: Record<string, unknown> }[] = [];
+    const adapter = new TelegramAdapter({
+      api,
+      tagSigil: "@",
+      logger: (level, msg, fields) => logs.push({ level, msg, fields }),
+    });
+    const received: InboundMessage[] = [];
+    await adapter.start((message) => {
+      received.push(message);
+      return Promise.resolve();
+    });
+    api.push(photoMsg({ caption: "@re-infra", attachment: undefined, droppedMedia: "sticker" }));
+    await delay(10);
+    expect(received[0].mentions).toEqual(["re-infra"]);
+    expect(received[0].text).toContain("a sticker was attached but isn't delivered by the hub");
+    expect(logs).toContainEqual(
+      expect.objectContaining({ level: "warn", msg: "inbound media not delivered", fields: { room: "-100", kind: "sticker" } }),
+    );
+  });
+
   it("annotates when the download fails (no bytes available)", async () => {
     const { api, received } = await adapterWithInbox();
     // f1 has no registered bytes → downloadFile returns undefined.

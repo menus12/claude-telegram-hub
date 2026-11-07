@@ -1,38 +1,13 @@
 import { Bot, InputFile } from "grammy";
-import type { Message } from "grammy/types";
 import type { Logger } from "../../logger.js";
+import { attachmentOf, droppedMediaOf } from "./attachment.js";
 import type {
   OutgoingFile,
   SendFileOptions,
   SendOptions,
   TelegramApi,
-  TgAttachment,
   TgMessage,
 } from "./types.js";
-
-/** Extract a normalized attachment from a Telegram message, if it carries one. */
-function attachmentOf(msg: Message): TgAttachment | undefined {
-  if (msg.photo && msg.photo.length > 0) {
-    // photo is an array of sizes; the last is the largest.
-    const largest = msg.photo[msg.photo.length - 1];
-    return {
-      fileId: largest.file_id,
-      filename: `photo_${msg.message_id}.jpg`,
-      mimeType: "image/jpeg",
-      ...(largest.file_size !== undefined ? { fileSize: largest.file_size } : {}),
-    };
-  }
-  if (msg.document) {
-    const d = msg.document;
-    return {
-      fileId: d.file_id,
-      filename: d.file_name ?? `document_${msg.message_id}`,
-      mimeType: d.mime_type ?? "application/octet-stream",
-      ...(d.file_size !== undefined ? { fileSize: d.file_size } : {}),
-    };
-  }
-  return undefined;
-}
 
 /**
  * grammY-backed {@link TelegramApi}. This is the only file that touches grammY;
@@ -54,12 +29,13 @@ export class GrammyApi implements TelegramApi {
   }
 
   onMessage(handler: (msg: TgMessage) => void): void {
-    // One handler for every message type; text, caption, and photo/document
-    // attachments are normalized here. Unsupported types yield a message with
-    // none of these, which normalization drops.
+    // One handler for every message type; text, caption, and file attachments
+    // (photo/document/audio/video/…) are normalized here. A file kind the hub
+    // doesn't deliver is named in `droppedMedia`, so it's logged, never silent.
     this.bot.on("message", (ctx) => {
       const m = ctx.message;
       const attachment = attachmentOf(m);
+      const droppedMedia = droppedMediaOf(m);
       const msg: TgMessage = {
         message_id: m.message_id,
         chat: { id: ctx.chat.id, type: ctx.chat.type },
@@ -69,6 +45,7 @@ export class GrammyApi implements TelegramApi {
         ...(m.text !== undefined ? { text: m.text } : {}),
         ...(m.caption !== undefined ? { caption: m.caption } : {}),
         ...(attachment ? { attachment } : {}),
+        ...(droppedMedia ? { droppedMedia } : {}),
         ...(m.voice
           ? {
               voice: {

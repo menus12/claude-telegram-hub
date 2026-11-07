@@ -224,6 +224,17 @@ export class TelegramAdapter implements TransportAdapter {
     const message = toInboundMessage(msg, this.opts.tagSigil, (reply) =>
       this.resolveReplyTarget(reply.room, reply.messageId, reply.text),
     );
+    if (msg.droppedMedia) {
+      // A file kind the hub doesn't deliver: say so in the log and, when the
+      // message is delivered at all, in its text — never a silent drop (#120).
+      this.opts.logger?.("warn", "inbound media not delivered", {
+        room: String(msg.chat.id),
+        kind: msg.droppedMedia,
+      });
+      if (message) {
+        message.text = annotate(message.text, `a ${msg.droppedMedia} was attached but isn't delivered by the hub`);
+      }
+    }
     if (!message) return;
     const inbox = this.inbox;
     if (!inbox) return;
