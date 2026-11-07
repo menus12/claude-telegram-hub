@@ -1,0 +1,52 @@
+# Cloud bridge overlay (#116): lets Claude Code on the web join this hub over
+# remote MCP through a Cloudflare named tunnel. Add it to the compose project that
+# runs the hub (it reaches the hub as service `hub`), e.g.:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.bridge.yml \
+#     --env-file .env --env-file bridge.env up -d bridge cloudflared
+#
+# `.env` is the hub's (supplies HUB_SESSION_SECRET); `bridge.env` (gitignored) sets
+# the variables below. Secrets stay in 0600 files on the box, mounted read-only.
+# See docs/cloud-agents.md. Rollback: `... stop bridge cloudflared`.
+services:
+  bridge:
+    image: ${BRIDGE_IMAGE:-ghcr.io/menus12/claude-telegram-hub:v0.16.0}
+    restart: unless-stopped
+    command: ["node", "packages/bridge/dist/main.cjs"]
+    environment:
+      BRIDGE_HUB_URL: ws://hub:8787
+      BRIDGE_HUB_SECRET: ${HUB_SESSION_SECRET:?the hub .env must be passed with --env-file}
+      BRIDGE_DEFAULT_ROOM: ${BRIDGE_DEFAULT_ROOM:?set BRIDGE_DEFAULT_ROOM in bridge.env}
+      BRIDGE_BIND_HOST: 0.0.0.0
+      BRIDGE_BIND_PORT: "8788"
+      BRIDGE_TOKENS_FILE: /run/secrets/bridge-tokens
+      BRIDGE_MAX_AGENTS_PER_TOKEN: ${BRIDGE_MAX_AGENTS_PER_TOKEN:-5}
+      BRIDGE_LOG_LEVEL: ${BRIDGE_LOG_LEVEL:-info}
+    volumes:
+      # `label sha256hex` lines; readable by the image's `node` user (uid 1000).
+      - ${BRIDGE_TOKENS_PATH:?set BRIDGE_TOKENS_PATH in bridge.env}:/run/secrets/bridge-tokens:ro
+    # Not published on the host: only cloudflared (same network) reaches it. The
+    # bridge's per-IP limiting trusts cf-connecting-ip, which is sound only so.
+    expose:
+      - "8788"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      - hub
+
+  # Remotely-managed named tunnel: the public hostname (→ http://bridge:8788) is
+  # configured by the network owner in Cloudflare; this box holds only the token.
+  cloudflared:
+    # Same version the Phase 0 tunnel ran.
+    image: cloudflare/cloudflared:2026.10.7
+    restart: unless-stopped
+    # Run as the token file's owner so a 0600 file is readable.
+    user: ${BRIDGE_RUN_AS:-1000:1000}
+    command: ["tunnel", "--no-autoupdate", "--protocol", "http2", "run", "--token-file", "/run/secrets/tunnel-token"]
+    volumes:
+      - ${TUNNEL_TOKEN_PATH:?set TUNNEL_TOKEN_PATH in bridge.env}:/run/secrets/tunnel-token:ro
+    depends_on:
+      - bridge
