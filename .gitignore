@@ -4,6 +4,10 @@
 !.env.example
 !**/.env.example
 *.token
+# cloud bridge (#116): env files and the hashed token list stay on the box
+bridge.env
+cloudflared.env
+bridge-tokens
 .telegram-hub.json
 **/state/
 **/*.pid

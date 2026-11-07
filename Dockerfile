@@ -8,6 +8,7 @@ COPY package.json package-lock.json tsconfig.base.json tsconfig.build.json ./
 COPY packages/protocol/package.json packages/protocol/
 COPY packages/channel/package.json packages/channel/
 COPY packages/hub/package.json packages/hub/
+COPY packages/bridge/package.json packages/bridge/
 RUN npm ci
 COPY . .
 RUN npm run build
@@ -22,11 +23,15 @@ COPY package.json package-lock.json ./
 COPY packages/protocol/package.json packages/protocol/
 COPY packages/channel/package.json packages/channel/
 COPY packages/hub/package.json packages/hub/
+COPY packages/bridge/package.json packages/bridge/
 RUN npm ci --omit=dev --ignore-scripts
 
 # Compiled JS for the hub and its workspace dependency.
 COPY --from=build /app/packages/protocol/dist packages/protocol/dist
 COPY --from=build /app/packages/hub/dist packages/hub/dist
+# The cloud bridge (#116) is one self-contained bundle; run it with
+# `node packages/bridge/dist/main.cjs` (see docs/cloud-agents.md).
+COPY --from=build /app/packages/bridge/dist/main.cjs packages/bridge/dist/main.cjs
 
 # One image, many deployments: only the environment differs. Bind all interfaces
 # so the container is reachable; front it with auth/TLS in production.
