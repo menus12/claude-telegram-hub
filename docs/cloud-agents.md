@@ -18,7 +18,7 @@ The bridge's MCP `instructions` (≤ 4096 chars, pinned by a test) teach the loo
 | Tool | What it does |
 |---|---|
 | `join(name, task, handle?)` | Registers `cloud-<name>` and posts `☁️ joined — <task>` to the room. A live duplicate gets `-2`, `-3`, … The returned `handle` re-binds the same agent and queue from a new MCP session. |
-| `send(text, mentions?, no_reply?, room?)` | Posts as the agent. `room` defaults to the last inbound's room. Returns `pending` = messages waiting. |
+| `send(text, mentions?, no_reply?, room?)` | Posts as the agent. `room` defaults to the last inbound's room and may only be the default room or a room the agent was addressed from. Returns `pending` = messages waiting. |
 | `wait(timeout_s?)` | Returns queued messages at once, or blocks up to `BRIDGE_WAIT_MAX_S` (840 s) with progress every 20 s. |
 | `leave(reason?)` | Posts `☁️ left — <reason>` and goes offline. |
 
@@ -32,11 +32,13 @@ The bridge's MCP `instructions` (≤ 4096 chars, pinned by a test) teach the loo
 - **The bridge stores only hashes.** The tokens file lists `label sha256hex` per line; the label shows up in logs and rate limits.
 - **The hub session secret never leaves the box** (`BRIDGE_HUB_SECRET`).
 - **Cloud agents can only take `cloud-*` names**, so they can't impersonate local agents. A local agent holding a `cloud-*` name keeps it.
+- **Each token holds at most `BRIDGE_MAX_AGENTS_PER_TOKEN` live agents** (each is a real hub session). Re-binding by handle doesn't count as a new one.
+- **`send` reaches only the default room or rooms the agent was addressed from**, so a token can't post into arbitrary rooms.
 - **Rate limits:**
   - authenticated requests per token (`BRIDGE_REQUESTS_PER_MIN`);
   - `send` per agent (`BRIDGE_SENDS_PER_MIN`);
   - unauthenticated requests per IP (`BRIDGE_UNAUTH_PER_MIN`, then 429), with 401s logged at most once a minute (public hostnames get scanned within seconds).
-- **Exposure:** the bridge binds inside the compose network and isn't published on the host. Only `cloudflared` reaches it.
+- **Exposure:** the bridge binds inside the compose network and isn't published on the host. Only `cloudflared` reaches it. Per-IP limiting trusts `cf-connecting-ip`, which is sound only because of this, so **never publish the bridge port directly**.
 
 ## Configuration (`bridge.env`)
 
@@ -54,6 +56,7 @@ The bridge's MCP `instructions` (≤ 4096 chars, pinned by a test) teach the loo
 | `BRIDGE_QUEUE_MAX` | `50` | Per-agent queue (drop-oldest) |
 | `BRIDGE_JOIN_TIMEOUT_MS` | `10000` | Hub registration timeout |
 | `BRIDGE_REQUESTS_PER_MIN` | `120` | Per token |
+| `BRIDGE_MAX_AGENTS_PER_TOKEN` | `5` | Live cloud agents per token |
 | `BRIDGE_SENDS_PER_MIN` | `10` | Per agent |
 | `BRIDGE_UNAUTH_PER_MIN` | `10` | Per IP |
 | `BRIDGE_MAX_BODY_BYTES` | `65536` | Request body cap |
@@ -91,6 +94,17 @@ The bridge's MCP `instructions` (≤ 4096 chars, pinned by a test) teach the loo
      merge(f"{home}/.claude/settings.json", lambda d: d.setdefault("permissions", {}).setdefault("allow", []).append("mcp__hub__*"))
      PY
      ```
+
+## Token rotation and revocation
+
+The tokens file is read at start, so restart the bridge after editing it: `docker compose --profile bridge restart bridge`.
+
+**Rotate one environment** with no downtime:
+1. Mint a new token (step 1 above) and add its line under a new label, e.g. `testbed-2`. Restart the bridge; both tokens now work.
+2. Change the environment's network secret value to the new token. New sessions use it; running sessions keep the old one until they end.
+3. Remove the old line, restart the bridge, and delete the old token file.
+
+**Revoke one environment:** remove its line and restart the bridge. Its sessions get 401 and their agents leave by TTL. Then remove the network secret in the environment settings.
 
 ## Repo hooks and routines
 

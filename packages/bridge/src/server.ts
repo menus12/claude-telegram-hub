@@ -207,7 +207,8 @@ export class BridgeServer {
       {
         description:
           "Post a message to the hub as your agent. `mentions` tags peers (or \"operator\"); `no_reply` marks an FYI. " +
-          "`room` defaults to the room of the last message you received. Returns `pending` = messages waiting for `wait`.",
+          "`room` defaults to the room of the last message you received (only that kind of room, or the default " +
+          "room, is allowed). Returns `pending` = messages waiting for `wait`.",
         inputSchema: {
           text: z.string().min(1).max(4000),
           mentions: z.array(z.string().min(1).max(64)).max(10).optional(),
@@ -222,8 +223,12 @@ export class BridgeServer {
         if (!this.sendLimiter.take(agent.name)) {
           return fail(`rate limited: at most ${config.sendsPerMin} sends per minute`);
         }
+        const to = agent.resolveRoom(room);
+        if (to === undefined) {
+          return fail("room not allowed: send only to the default room or a room you received a message from");
+        }
         if (!agent.hubConnected()) return fail("hub link is reconnecting — retry in a few seconds");
-        const to = agent.send({ text: body, mentions, noReply: no_reply, room });
+        agent.send({ text: body, mentions, noReply: no_reply, room: to });
         return text({ ok: true, room: to, pending: agent.pending });
       },
     );
@@ -285,6 +290,9 @@ export class BridgeServer {
   }
 
   private rejectUnauthenticated(req: IncomingMessage, res: ServerResponse): void {
+    // `cf-connecting-ip` is client-controlled unless Cloudflare set it. Trusting it is
+    // sound ONLY because the bridge is reachable solely through cloudflared (bound to
+    // 127.0.0.1, or `expose`-only in compose). Never publish the bridge port directly.
     const ip = (req.headers["cf-connecting-ip"] as string | undefined) ?? req.socket.remoteAddress ?? "?";
     this.unauthRejected++;
     const t = this.now();

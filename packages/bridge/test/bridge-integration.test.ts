@@ -13,6 +13,7 @@ if (!globalThis.crypto) Object.assign(globalThis, { crypto: webcrypto });
 const TOKEN = "t".repeat(64);
 const OTHER_TOKEN = "o".repeat(64);
 const ROOM = "-100";
+const OTHER_ROOM = "-200";
 
 let hub: Hub | undefined;
 let bridge: BridgeServer | undefined;
@@ -36,7 +37,7 @@ async function setup(over: Partial<BridgeConfig> = {}) {
     config: loadHubConfig({
       HUB_SESSION_SECRET: "s3cr3t",
       HUB_ALLOWLIST: "user1",
-      HUB_ROOMS: ROOM,
+      HUB_ROOMS: `${ROOM},${OTHER_ROOM}`,
       HUB_BIND_HOST: "127.0.0.1",
       HUB_BIND_PORT: "0",
       HUB_ADAPTER: "loopback",
@@ -61,6 +62,7 @@ async function setup(over: Partial<BridgeConfig> = {}) {
     queueMax: 50,
     joinTimeoutMs: 3000,
     requestsPerMin: 1000,
+    maxAgentsPerToken: 5,
     sendsPerMin: 100,
     unauthPerMin: 100,
     maxBodyBytes: 64 * 1024,
@@ -100,8 +102,8 @@ async function call(client: Client, name: string, args: Record<string, unknown> 
   return { isError: r.isError === true, raw, json: json ?? {} };
 }
 
-function operatorSays(adapter: LoopbackAdapter, text: string, mentions: string[]) {
-  return adapter.deliver({ adapter: "loopback", room: ROOM, fromKind: "human", fromId: "user1", text, mentions });
+function operatorSays(adapter: LoopbackAdapter, text: string, mentions: string[], room = ROOM) {
+  return adapter.deliver({ adapter: "loopback", room, fromKind: "human", fromId: "user1", text, mentions });
 }
 
 describe("bridge HTTP surface", () => {
@@ -283,5 +285,40 @@ describe("cloud agent lifecycle", () => {
     const third = await call(client, "send", { text: "3", no_reply: true });
     expect(third.isError).toBe(true);
     expect(third.raw).toContain("rate limited");
+  });
+
+  it("caps live agents per token; rebind doesn't count, leave frees a slot, other tokens are separate", async () => {
+    const { base } = await setup({ maxAgentsPerToken: 2 });
+    const a = await connect(base);
+    const first = await call(a, "join", { name: "one", task: "t" });
+    await call(await connect(base), "join", { name: "two", task: "t" });
+
+    const third = await call(await connect(base), "join", { name: "three", task: "t" });
+    expect(third.isError).toBe(true);
+    expect(third.raw).toContain("max 2");
+
+    const rebind = await call(await connect(base), "join", { name: "one", task: "t", handle: first.json.handle });
+    expect(rebind.json).toMatchObject({ agent: "cloud-one", rebound: true });
+    expect((await call(await connect(base, OTHER_TOKEN), "join", { name: "x", task: "t" })).isError).toBe(false);
+
+    await call(a, "leave");
+    expect((await call(await connect(base), "join", { name: "three", task: "t" })).json.agent).toBe("cloud-three");
+  });
+
+  it("send only reaches the default room or rooms the agent was addressed from", async () => {
+    const { adapter, base } = await setup();
+    const client = await connect(base);
+    await call(client, "join", { name: "router", task: "t" });
+
+    const denied = await call(client, "send", { text: "x", room: OTHER_ROOM, no_reply: true });
+    expect(denied.isError).toBe(true);
+    expect(denied.raw).toContain("room not allowed");
+    expect((await call(client, "send", { text: "x", room: "-999", no_reply: true })).isError).toBe(true);
+
+    await operatorSays(adapter, "@cloud-router over here", ["cloud-router"], OTHER_ROOM);
+    await new Promise((r) => setTimeout(r, 100));
+    const ok = await call(client, "send", { text: "hello other room", no_reply: true });
+    expect(ok.json).toMatchObject({ ok: true, room: OTHER_ROOM });
+    expect((await call(client, "send", { text: "back home", room: ROOM, no_reply: true })).isError).toBe(false);
   });
 });

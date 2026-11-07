@@ -34,6 +34,8 @@ export const bridgeConfigSchema = z.object({
   joinTimeoutMs: z.number().int().positive().default(10_000),
   /** Authenticated HTTP requests per minute, per token. */
   requestsPerMin: z.number().int().positive().default(120),
+  /** Live cloud agents one token (one cloud environment) may hold at once. */
+  maxAgentsPerToken: z.number().int().positive().default(5),
   /** `send` calls per minute, per agent (protects the room). */
   sendsPerMin: z.number().int().positive().default(10),
   /** Unauthenticated requests per minute, per client IP, before 429. */
@@ -58,6 +60,7 @@ export const BRIDGE_ENV = {
   queueMax: "BRIDGE_QUEUE_MAX",
   joinTimeoutMs: "BRIDGE_JOIN_TIMEOUT_MS",
   requestsPerMin: "BRIDGE_REQUESTS_PER_MIN",
+  maxAgentsPerToken: "BRIDGE_MAX_AGENTS_PER_TOKEN",
   sendsPerMin: "BRIDGE_SENDS_PER_MIN",
   unauthPerMin: "BRIDGE_UNAUTH_PER_MIN",
   maxBodyBytes: "BRIDGE_MAX_BODY_BYTES",
@@ -72,6 +75,7 @@ const NUMERIC = new Set<keyof BridgeConfig>([
   "queueMax",
   "joinTimeoutMs",
   "requestsPerMin",
+  "maxAgentsPerToken",
   "sendsPerMin",
   "unauthPerMin",
   "maxBodyBytes",

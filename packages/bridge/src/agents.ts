@@ -24,6 +24,7 @@ export type HubClientFactory = (
 const MAX_NAME_SLUG = 40;
 const MAX_TASK_CHARS = 200;
 const MAX_SUFFIX = 9;
+const MAX_KNOWN_ROOMS = 20;
 
 /**
  * Normalize an agent-chosen name into `<prefix><slug>`: lowercase, `[a-z0-9-]` only
@@ -52,6 +53,8 @@ export class CloudAgent {
   private dropped = 0;
   private waiter: ((r: WaitResult) => void) | undefined;
   private lastRoom: string | undefined;
+  /** Rooms this agent may post to: the default room plus rooms it was addressed from. */
+  private readonly rooms: Set<string>;
   lastActivity: number;
   closed = false;
 
@@ -64,6 +67,7 @@ export class CloudAgent {
     private readonly now: () => number,
   ) {
     this.lastActivity = now();
+    this.rooms = new Set([cfg.defaultRoom]);
   }
 
   /** Register with the hub; resolves with undefined on success or the rejection code. */
@@ -120,16 +124,25 @@ export class CloudAgent {
     return !this.closed && (this.client?.isConnected() ?? false);
   }
 
+  /**
+   * The room a `send` goes to: the requested one if this agent may post there (the
+   * default room, or one it received a message from), else undefined. A bridge
+   * token must not be able to address a room it was never addressed from.
+   */
+  resolveRoom(requested: string | undefined): string | undefined {
+    const room = requested ?? this.lastRoom ?? this.cfg.defaultRoom;
+    return this.rooms.has(room) ? room : undefined;
+  }
+
   /** Post into a room as this agent (the hub routes it like any session's reply). */
-  send(input: { text: string; mentions?: string[]; noReply?: boolean; room?: string }): string {
-    const room = input.room ?? this.lastRoom ?? this.cfg.defaultRoom;
+  send(input: { text: string; mentions?: string[]; noReply?: boolean; room: string }): void {
+    const { room } = input;
     this.client?.sendReply({
       room,
       text: input.text,
       mentions: input.mentions ?? [],
       ...(input.noReply ? { noReply: true } : {}),
     });
-    return room;
   }
 
   /** Return queued messages now, or block until one arrives / the timeout / abort. */
@@ -176,6 +189,9 @@ export class CloudAgent {
       text += `\n[attachment "${frame.file.filename}" is not available to cloud agents]`;
     }
     this.lastRoom = frame.message.room;
+    if (!this.rooms.has(frame.message.room) && this.rooms.size < MAX_KNOWN_ROOMS) {
+      this.rooms.add(frame.message.room);
+    }
     this.queue.push({ ...params.meta, text });
     if (this.queue.length > this.cfg.queueMax) {
       this.queue.shift();
@@ -218,6 +234,15 @@ export class AgentPool {
         if (task) existing.task = task;
         return { ok: true, agent: existing, rebound: true };
       }
+    }
+    // Cap live agents per token: each one is a real hub session (presence, SLA,
+    // governor state), so one environment must not be able to open unboundedly many.
+    const live = this.all().filter((a) => !a.closed && a.tokenLabel === opts.tokenLabel).length;
+    if (live >= this.cfg.maxAgentsPerToken) {
+      return {
+        ok: false,
+        error: `this environment already has ${live} live cloud agents (max ${this.cfg.maxAgentsPerToken}); leave one first`,
+      };
     }
     const base = cloudAgentName(this.cfg.agentPrefix, opts.name);
     for (let n = 1; n <= MAX_SUFFIX; n++) {
