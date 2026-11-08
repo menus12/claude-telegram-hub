@@ -8,7 +8,7 @@ export type TgChatType = "private" | "group" | "supergroup" | "channel";
 
 /**
  * A normalized attachment on an inbound message. grammY maps Telegram's photo /
- * document shapes onto this single form (largest photo size; synthesized name /
+ * document / audio / video / video_note / animation shapes onto this single form (largest photo size; synthesized name /
  * mime for photos) so the rest of the adapter handles one attachment type.
  */
 export interface TgAttachment {
@@ -28,8 +28,13 @@ export interface TgMessage {
   text?: string;
   /** Caption on a photo/document message (routed like `text`). */
   caption?: string;
-  /** A photo or document attached to the message, normalized. */
+  /** A file attached to the message (photo/document/audio/video/…), normalized. */
   attachment?: TgAttachment;
+  /**
+   * A media kind the message carried that the hub doesn't deliver (e.g. "sticker").
+   * Logged and noted in the delivered text, so a file is never dropped silently (#120).
+   */
+  droppedMedia?: string;
   /** A voice note (OGG/Opus) — transcribed to text, not delivered as a file. */
   voice?: { fileId: string; mimeType: string; duration?: number; fileSize?: number };
   /**

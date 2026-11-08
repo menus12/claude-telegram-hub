@@ -127,8 +127,11 @@ that already carries messages — so file transfer works whether the hub is co-l
   streams the bytes to the tagged session's channel. The **channel** — always co-located with its
   session — writes them to a local temp file and surfaces that path (`attachment_path`) to the
   agent, which opens it with its normal file tools. Routing is unchanged: the caption is treated as
-  the message text, so an untagged file isn't delivered. Files over the Bot API's 20 MB download
-  limit aren't fetched; the agent gets the caption plus a note.
+  the message text, so an untagged file isn't delivered. Photos, documents, audio files (Telegram
+  Desktop sends `.ogg`/`.mp3` as audio), videos, video notes and animations all count as files; a
+  voice note is transcribed instead (below). Files over the Bot API's 20 MB download limit aren't
+  fetched; the agent gets the caption plus a note. A kind the hub doesn't deliver (e.g. a sticker) is
+  logged (`inbound media not delivered`) and noted in the text, never dropped silently.
 - **Outbound.** The agent calls the channel's `send_file` tool with a local path (+ optional
   caption). The channel reads the bytes and sends them through the hub; the adapter uploads them —
   as a photo for small images, otherwise a document (preserving the file, up to ~50 MB). Captions
