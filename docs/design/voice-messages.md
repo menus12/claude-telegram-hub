@@ -85,7 +85,9 @@ for?" notice). Consistent with explicit-mention-only routing.
   governor-neutral, one line (Part A: no ceremony). It also makes the transcript legible/searchable
   (Part A rule 6: the text is the durable artifact of the voice).
 - **S3 — Garbled / empty / low-confidence.** Silence/noise → no route + `couldn't make out that
-  voice note — try again or type it`. Low-confidence → echo with a `(low confidence)` marker. An
+  voice note — try again or type it`. A *failed* transcription (STT timeout/error, download failure)
+  is reported separately — `couldn't transcribe that voice note (<reason>)` — so a long note that
+  timed out isn't mistaken for noise (#109). Low-confidence → echo with a `(low confidence)` marker. An
   ambiguous request → the agent **asks in the channel** (Part A rule 7), never a blocking terminal prompt.
 - **S4 — Destructive spoken ask.** No special rule: the agent already confirms irreversible asks
   in-channel, and the S2 echo gives a correction window. Optional `HUB_VOICE_CONFIRM=high-stakes` to

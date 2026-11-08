@@ -163,7 +163,11 @@ transcript's `voice` marker:
 - **Transcript echo.** The hub posts `🎙️ heard → @…: "transcript"` (`HUB_VOICE_ECHO`, default on) — a
   colleague-style paraphrase that lets the operator catch a mis-hear *or* a mis-address before agents
   act. Governor-neutral, one line. An unclear/unaddressed note gets a brief explanatory notice, never
-  a silent drop or an accidental broadcast.
+  a silent drop or an accidental broadcast — and a log line. An **unaddressed** transcript is parked
+  per (room, sender) for 15 min and a bare `@agent` from that sender delivers it; a **forwarded** note
+  (or file) inherits the address of the sender's tagged comment from ≤ 10 s earlier ("forward with
+  comment" arrives as two messages); a **failed** transcription (timeout/STT error) gets its own
+  notice with the reason, distinct from "couldn't make out" (#109).
 - **Voiced replies (opt-in, `HUB_TTS_URL`).** An agent may set `voice: true` on `reply` to also render
   a **short** reply as a voice note — one message, captioned with the attributed text (the source of
   truth). It's human-facing only (agent→agent re-injection stays text) and the hub is the safety net:

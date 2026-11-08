@@ -17,7 +17,7 @@ export { SettingsStore, TUNABLES, tunableByKey, type Tunable } from "./settings.
 export { readStateFile, writeStateFile } from "./state-file.js";
 export { Session } from "./session.js";
 export { SessionServer, type SessionServerOptions } from "./server.js";
-export type { TransportAdapter, Inbox, OutboundVoice } from "./adapter.js";
+export type { TransportAdapter, Inbox, InboundMeta, OutboundVoice } from "./adapter.js";
 export {
   HttpTranscriptionService,
   type TranscriptionService,

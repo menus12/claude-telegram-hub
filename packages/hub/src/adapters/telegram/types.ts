@@ -44,6 +44,12 @@ export interface TgMessage {
    * survives a restart, from the attributed `text` (`agent ▸ …`).
    */
   reply_to_message?: { message_id: number; text?: string };
+  /**
+   * True when the message was forwarded (Bot API `forward_origin` set). A forward
+   * carries no `@tag` of its own; with "forward with comment" Telegram delivers the
+   * comment as a separate message just before it (#109).
+   */
+  forwarded?: boolean;
 }
 
 export interface SendOptions {

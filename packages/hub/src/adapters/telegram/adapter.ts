@@ -6,7 +6,7 @@ import type {
   OutboundMessage,
   RouteTarget,
 } from "@claude-telegram-hub/protocol";
-import type { Inbox, OutboundVoice, TransportAdapter } from "../../adapter.js";
+import type { Inbox, InboundMeta, OutboundVoice, TransportAdapter } from "../../adapter.js";
 import type { Logger } from "../../logger.js";
 import type { TranscriptionService } from "../../transcription.js";
 import { toTelegramMarkdown } from "./format.js";
@@ -25,6 +25,13 @@ const MB = 1024 * 1024;
 const INBOUND_MAX_BYTES = 20 * MB;
 /** sendPhoto caps at ~10 MB; larger images go as documents (which preserve them). */
 const PHOTO_MAX_BYTES = 10 * MB;
+/**
+ * How recent the sender's addressed message must be for a forward to inherit its
+ * address. "Forward with comment" delivers the comment and the forward(s) within
+ * a second or two; the window is kept tight so a later forward is never routed by
+ * a stale tag (#109).
+ */
+export const FORWARD_COMMENT_WINDOW_MS = 10_000;
 
 export interface TelegramAdapterOptions {
   api: TelegramApi;
@@ -46,6 +53,8 @@ export interface TelegramAdapterOptions {
    * `kb` / `conn` transcribe badly without a hint). Called per voice note.
    */
   getAgents?: () => string[];
+  /** Clock for the forward-comment window; tests supply a fake. */
+  now?: () => number;
 }
 
 /**
@@ -60,6 +69,12 @@ export class TelegramAdapter implements TransportAdapter {
   private readonly replies: ReplyIndex;
   /** Last human message id per room — the target for an `@operator` mute-breaking reply (#94). */
   private readonly lastHumanMsg = new Map<string, number>();
+  /**
+   * The last addressed (tagged) non-forwarded message per room+sender, so a
+   * forward that follows it — Telegram's "forward with comment" — inherits its
+   * recipients (#109). One entry per active sender.
+   */
+  private readonly lastAddressed = new Map<string, { mentions: string[]; at: number }>();
 
   constructor(private readonly opts: TelegramAdapterOptions) {
     this.replies = opts.replyIndex ?? new ReplyIndex();
@@ -211,6 +226,25 @@ export class TelegramAdapter implements TransportAdapter {
     return this.replies.resolve(room, messageId) ?? (text ? parseAttribution(text) : undefined);
   }
 
+  private now(): number {
+    return (this.opts.now ?? Date.now)();
+  }
+
+  private addressKey(msg: TgMessage): string | undefined {
+    return msg.from ? `${msg.chat.id}\u0000${msg.from.id}` : undefined;
+  }
+
+  /**
+   * The recipients a forward inherits: those of the same sender's addressed message
+   * in the same room, if it arrived within {@link FORWARD_COMMENT_WINDOW_MS}.
+   */
+  private forwardCommentMentions(msg: TgMessage): string[] {
+    const key = this.addressKey(msg);
+    const last = key ? this.lastAddressed.get(key) : undefined;
+    if (!last || this.now() - last.at > FORWARD_COMMENT_WINDOW_MS) return [];
+    return [...last.mentions];
+  }
+
   private handle(msg: TgMessage): void {
     // Remember the last human message per room, so an `@operator` reply can target
     // it (a reply notifies even in a muted chat) (#94).
@@ -236,6 +270,23 @@ export class TelegramAdapter implements TransportAdapter {
       }
     }
     if (!message) return;
+    const key = this.addressKey(msg);
+    if (msg.forwarded) {
+      // A forward has no address of its own: with "forward with comment", the
+      // `@agent` comment arrived as its own message just before (#109).
+      if (message.mentions.length === 0) {
+        message.mentions = this.forwardCommentMentions(msg);
+        if (message.mentions.length > 0) {
+          this.opts.logger?.("info", "forward addressed by preceding comment", {
+            room: message.room,
+            recipients: message.mentions.length,
+          });
+        }
+      }
+    } else if (key && message.mentions.length > 0) {
+      this.lastAddressed.set(key, { mentions: [...message.mentions], at: this.now() });
+    }
+    const meta: InboundMeta | undefined = msg.forwarded ? { forwarded: true } : undefined;
     const inbox = this.inbox;
     if (!inbox) return;
     // Only fetch an attachment's bytes when the message is actually routed
@@ -244,9 +295,9 @@ export class TelegramAdapter implements TransportAdapter {
     const wantsFile = msg.attachment !== undefined && message.mentions.length > 0;
     const deliver = wantsFile
       ? this.resolveFile(msg.attachment as TgAttachment, message).then((file) =>
-          inbox(message, file),
+          inbox(message, file, meta),
         )
-      : inbox(message);
+      : inbox(message, undefined, meta);
     void deliver.catch((err: unknown) => {
       this.opts.logger?.("warn", "failed to hand inbound to hub", {
         error: String(err),
@@ -309,29 +360,44 @@ export class TelegramAdapter implements TransportAdapter {
       const agent = this.resolveReplyTarget(room, repliedTo.message_id, repliedTo.text);
       if (agent) mentions.push(agent);
     }
+    // Captured before the (slow) transcription, so the comment window is measured
+    // from arrival, not from when STT finishes.
+    if (mentions.length === 0 && msg.forwarded) mentions.push(...this.forwardCommentMentions(msg));
 
+    const { text, error } = this.opts.transcriber
+      ? await this.transcribeVoice(voice)
+      : { text: "", error: undefined };
     const message: InboundMessage = {
       adapter: "telegram",
       room,
       fromKind: "human",
       fromId: String(from.id),
-      text: this.opts.transcriber ? await this.transcribeVoice(voice) : "",
+      text,
       mentions,
       voice: true,
     };
-    await inbox(message);
+    const meta: InboundMeta = {
+      ...(msg.forwarded ? { forwarded: true } : {}),
+      ...(error ? { transcriptionError: error } : {}),
+    };
+    await inbox(message, undefined, meta);
   }
 
-  /** Fetch a voice note's bytes and transcribe; returns "" on any failure. */
-  private async transcribeVoice(voice: NonNullable<TgMessage["voice"]>): Promise<string> {
+  /**
+   * Fetch a voice note's bytes and transcribe. On failure `text` is "" and `error`
+   * says why (so the hub can tell "transcription failed" from "nothing heard").
+   */
+  private async transcribeVoice(
+    voice: NonNullable<TgMessage["voice"]>,
+  ): Promise<{ text: string; error?: string }> {
     if (voice.fileSize !== undefined && voice.fileSize > INBOUND_MAX_BYTES) {
       this.opts.logger?.("warn", "voice note too large to fetch", { fileSize: voice.fileSize });
-      return "";
+      return { text: "", error: "over the 20 MB download limit" };
     }
     const bytes = await this.opts.api.downloadFile(voice.fileId);
     if (!bytes) {
       this.opts.logger?.("warn", "voice note download failed");
-      return "";
+      return { text: "", error: "download failed" };
     }
     // Prime the model with the live agent names so short repo tokens ("kb", "conn")
     // transcribe correctly — the main way to address an agent by voice.
@@ -346,12 +412,25 @@ export class TelegramAdapter implements TransportAdapter {
         bytes: bytes.length,
         chars: text.length,
       });
-      return text;
+      return { text };
     } catch (err) {
       this.opts.logger?.("warn", "voice transcription failed", { error: String(err) });
-      return "";
+      return { text: "", error: transcriptionFailureReason(err) };
     }
   }
+}
+
+/**
+ * A short, operator-facing reason for a failed transcription. A timeout (the STT
+ * request's `AbortSignal.timeout`) is called out, since its fix is a config knob.
+ */
+function transcriptionFailureReason(err: unknown): string {
+  const name = err instanceof Error ? err.name : "";
+  if (name === "TimeoutError" || name === "AbortError") {
+    return "speech-to-text timed out; an admin can raise HUB_STT_TIMEOUT_MS";
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return `speech-to-text error: ${msg.length > 120 ? `${msg.slice(0, 119)}…` : msg}`;
 }
 
 /** Append a bracketed note to message text (keeps any caption the operator sent). */

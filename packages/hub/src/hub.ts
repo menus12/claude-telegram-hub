@@ -5,11 +5,13 @@ import {
   slaEscalationNotice,
   transcriptEchoNotice,
   voiceDisabledNotice,
+  voiceTranscriptionFailedNotice,
   voiceUnaddressedNotice,
   voiceUnclearNotice,
 } from "@claude-telegram-hub/protocol";
 import { isBroadcastMention, isOperatorMention, parseMentions, speakableText } from "@claude-telegram-hub/protocol";
 import { resolveSpokenRecipients } from "./voice-routing.js";
+import { VoiceParking, isBareMentions } from "./voice-parking.js";
 import { pickVoice } from "./voice-lang.js";
 import type {
   FilePayload,
@@ -20,7 +22,7 @@ import type {
   RouteTarget,
   SendFileFrame,
 } from "@claude-telegram-hub/protocol";
-import type { TransportAdapter } from "./adapter.js";
+import type { InboundMeta, TransportAdapter } from "./adapter.js";
 import { AccessController, KNOWN_COMMANDS, parseCommand, type ParsedCommand } from "./access.js";
 import { SettingsStore, TUNABLES, tunableByKey } from "./settings.js";
 import { AgentRegistry } from "./registry.js";
@@ -40,7 +42,12 @@ export interface HubDeps {
   scheduler?: Scheduler;
   /** Text-to-speech for voiced replies; absent → agents can't reply with voice. */
   synth?: SynthesisService;
+  /** Clock for time windows (parked voice transcripts); tests supply a fake. */
+  now?: () => number;
 }
+
+/** How long an unaddressed voice transcript stays claimable with a bare `@agent` (#109). */
+export const VOICE_PARK_MINUTES = 15;
 
 /** Trim an asking message to a short quotable snippet for reminders/escalations. */
 function quote(text: string, max = 80): string {
@@ -89,6 +96,8 @@ export class Hub {
   // Rejected duplicate registrations per agent name, surfaced in `/who` so a name
   // being claimed by a second (orphan) connection is diagnosable in-chat (#99).
   private readonly dupRejections = new Map<string, { count: number; lastAt: number }>();
+  // Unaddressed voice transcripts, claimable by a bare `@agent` from the sender (#109).
+  private readonly parkedVoice: VoiceParking;
   private started = false;
 
   constructor(private readonly deps: HubDeps) {
@@ -106,6 +115,7 @@ export class Hub {
       logger: deps.logger,
     });
     this.voiceEnabled = deps.config.sttUrl !== undefined;
+    this.parkedVoice = new VoiceParking(VOICE_PARK_MINUTES * 60_000, deps.now);
     this.synth = deps.synth;
     this.governor = new LoopGovernor(deps.config.hopBudget);
     this.sla = new ResponseSla({
@@ -179,7 +189,7 @@ export class Hub {
 
   async start(): Promise<void> {
     await this.server.listen();
-    await this.deps.adapter.start((m, f) => this.onInbound(m, f));
+    await this.deps.adapter.start((m, f, meta) => this.onInbound(m, f, meta));
     this.started = true;
     this.deps.logger("info", "hub started", { adapter: this.deps.adapter.name });
   }
@@ -537,7 +547,7 @@ export class Hub {
   }
 
   /** adapter → hub: a normalized platform inbound message (optionally with a file). */
-  private async onInbound(message: InboundMessage, file?: FilePayload): Promise<void> {
+  private async onInbound(message: InboundMessage, file?: FilePayload, meta?: InboundMeta): Promise<void> {
     // Access control applies to real senders; agent-origin traffic is hub-internal.
     if (message.fromKind === "human") {
       // In-chat allowlist commands (a known `/name`) are handled before the access
@@ -557,10 +567,15 @@ export class Hub {
     // license to continue), unfreezing agent↔agent routing there.
     this.governor.refill(message.room);
 
+    // A bare `@agent` from a sender with a parked (unaddressed) voice transcript
+    // claims it: the transcript is delivered to the tagged agents as the voice note
+    // it was, echo included (#109).
+    if (message.fromKind === "human" && !message.voice) this.claimParkedVoice(message, file);
+
     // Voice notes carry no `@tags`, so resolve their recipients (and echo the
     // transcript) before the mention check below. Returns false when it handled
-    // the message with a notice (disabled / unclear / unaddressed).
-    if (message.voice && !this.handleVoiceAddressing(message)) return;
+    // the message with a notice (disabled / unclear / unaddressed / failed).
+    if (message.voice && !this.handleVoiceAddressing(message, meta)) return;
 
     // Operator broadcast: `@all` from a human expands to every live agent, so
     // unicast/multicast/broadcast are all just "route to a set" downstream.
@@ -657,20 +672,33 @@ export class Hub {
   }
 
   /**
-   * Resolve and echo a voice note. Addressing priority: reply-to (already in
-   * `mentions`) wins; otherwise the transcript's leading names / broadcast keyword.
-   * Sets `message.mentions` and posts the transcript echo. Returns false — and
-   * posts an explanatory notice — when the note is disabled / unclear / unaddressed,
-   * so the caller stops.
+   * Resolve and echo a voice note. Addressing priority: reply-to or a forward's
+   * comment (already in `mentions`) wins; otherwise the transcript's leading names /
+   * broadcast keyword. Sets `message.mentions` and posts the transcript echo. Returns
+   * false — after a notice AND a log line, so a dropped note is never silent in the
+   * logs either (#109) — when the note is disabled / failed / unclear / unaddressed.
+   * An unaddressed transcript is parked so the sender can still claim it.
    */
-  private handleVoiceAddressing(message: InboundMessage): boolean {
+  private handleVoiceAddressing(message: InboundMessage, meta?: InboundMeta): boolean {
     const room = message.room;
+    const forwarded = meta?.forwarded === true;
     if (!this.voiceEnabled) {
+      this.deps.logger("info", "voice note dropped: transcription not configured", { room });
       this.replyNotice(room, voiceDisabledNotice().text);
       return false;
     }
     if (message.text.trim() === "") {
-      this.replyNotice(room, voiceUnclearNotice().text);
+      if (meta?.transcriptionError) {
+        this.deps.logger("warn", "voice note dropped: transcription failed", {
+          room,
+          reason: meta.transcriptionError,
+          forwarded,
+        });
+        this.replyNotice(room, voiceTranscriptionFailedNotice(meta.transcriptionError).text);
+      } else {
+        this.deps.logger("info", "voice note dropped: empty transcript", { room, forwarded });
+        this.replyNotice(room, voiceUnclearNotice().text);
+      }
       return false;
     }
     // Reply-to (if any) already populated mentions; only resolve spoken recipients
@@ -680,7 +708,13 @@ export class Hub {
       message.mentions = spoken.broadcast ? this.registry.list() : spoken.recipients;
     }
     if (message.mentions.length === 0) {
-      this.replyNotice(room, voiceUnaddressedNotice().text);
+      this.parkedVoice.park(room, message.fromId, message.text);
+      this.deps.logger("info", "voice note unaddressed; parked for claim", {
+        room,
+        chars: message.text.length,
+        forwarded,
+      });
+      this.replyNotice(room, voiceUnaddressedNotice(VOICE_PARK_MINUTES).text);
       return false;
     }
     if (this.effective("voiceEcho")) {
@@ -691,6 +725,24 @@ export class Hub {
       recipients: message.mentions.length,
     });
     return true;
+  }
+
+  /**
+   * Turn a bare `@agent` message into the sender's parked voice transcript, if one
+   * is waiting (#109). Only a message with nothing but tags (and no file) claims —
+   * anything with its own words is an ordinary message.
+   */
+  private claimParkedVoice(message: InboundMessage, file?: FilePayload): void {
+    if (message.mentions.length === 0 || file || message.attachments?.length) return;
+    if (!isBareMentions(message.text, this.deps.config.tagSigil)) return;
+    const parked = this.parkedVoice.claim(message.room, message.fromId);
+    if (!parked) return;
+    message.text = parked.text;
+    message.voice = true;
+    this.deps.logger("info", "parked voice transcript claimed", {
+      room: message.room,
+      chars: parked.text.length,
+    });
   }
 
   /**

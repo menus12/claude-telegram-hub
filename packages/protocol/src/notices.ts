@@ -119,14 +119,34 @@ export function transcriptEchoNotice(recipients: string[], transcript: string): 
   };
 }
 
-/** A voice note arrived but nobody could be resolved as its recipient. */
-export function voiceUnaddressedNotice(): OutboundMessage {
+/**
+ * A voice note arrived but nobody could be resolved as its recipient. With
+ * `claimMinutes`, the hub has parked the transcript: a bare `@agent` message from
+ * the same sender within that window delivers it (#109).
+ */
+export function voiceUnaddressedNotice(claimMinutes?: number): OutboundMessage {
+  const how = "reply to an agent's message, or start with their name (or “everyone”)";
   return {
     agent: "hub",
     kind: "notice",
     text:
-      "🎙️ heard a voice note but couldn't tell who it's for — reply to an agent's " +
-      "message, or start with their name (or “everyone”).",
+      claimMinutes !== undefined
+        ? `🎙️ heard a voice note but couldn't tell who it's for. Send just @agent within ` +
+          `${claimMinutes} min to deliver it — or next time ${how}.`
+        : `🎙️ heard a voice note but couldn't tell who it's for — ${how}.`,
+  };
+}
+
+/**
+ * Transcription itself failed (timeout, STT error, download failure) — distinct
+ * from {@link voiceUnclearNotice}, where the audio was transcribed but nothing
+ * was heard. Telegram keeps the original, so re-sending it is cheap (#109).
+ */
+export function voiceTranscriptionFailedNotice(reason: string): OutboundMessage {
+  return {
+    agent: "hub",
+    kind: "notice",
+    text: `🎙️ couldn't transcribe that voice note (${reason}) — re-send it or type it.`,
   };
 }
 
