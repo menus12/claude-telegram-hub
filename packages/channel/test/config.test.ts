@@ -113,3 +113,49 @@ describe("loadChannelConfigs (multi-hub, #90)", () => {
     expect(() => loadChannelConfigs({ env: { HOME: dir }, cwd: dir })).toThrow(/hubs\[0\]/);
   });
 });
+
+describe("connect headers (#123)", () => {
+  it("reads headers from the repo file as an object", () => {
+    writeRepoFile({
+      hubUrl: "wss://h.example",
+      sessionSecret: "s",
+      agent: "a",
+      headers: { "CF-Access-Client-Id": "id", "CF-Access-Client-Secret": "sec" },
+    });
+    const cfg = loadChannelConfig({ env: { HOME: dir }, cwd: dir });
+    expect(cfg.headers).toEqual({ "CF-Access-Client-Id": "id", "CF-Access-Client-Secret": "sec" });
+  });
+
+  it("lets TELEGRAM_HUB_HEADERS (JSON) override the file", () => {
+    writeRepoFile({ hubUrl: "wss://h.example", sessionSecret: "s", agent: "a", headers: { X: "file" } });
+    const cfg = loadChannelConfig({ env: { HOME: dir, TELEGRAM_HUB_HEADERS: '{"X":"env"}' }, cwd: dir });
+    expect(cfg.headers).toEqual({ X: "env" });
+  });
+
+  it("rejects malformed headers without echoing the value", () => {
+    const base = { HOME: dir, TELEGRAM_HUB_URL: "wss://h.example", TELEGRAM_HUB_SECRET: "s", TELEGRAM_HUB_AGENT: "a" };
+    expect(() => loadChannelConfig({ env: { ...base, TELEGRAM_HUB_HEADERS: "{not-json super-secret" }, cwd: dir })).toThrow(
+      /headers must be a JSON object/,
+    );
+    let msg = "";
+    try {
+      loadChannelConfig({ env: { ...base, TELEGRAM_HUB_HEADERS: '{"X":"line1\\nsuper-secret"}' }, cwd: dir });
+    } catch (err) {
+      msg = (err as Error).message;
+    }
+    expect(msg).toContain("single line");
+    expect(msg).not.toContain("super-secret");
+  });
+
+  it("takes headers per hub entry in a multi-hub config", () => {
+    writeRepoFile({
+      hubs: [
+        { label: "learn", hubUrl: "wss://l.example", sessionSecret: "s", agent: "a", headers: { "CF-Access-Client-Id": "l" } },
+        { label: "local", hubUrl: "ws://127.0.0.1:8787", sessionSecret: "s", agent: "a" },
+      ],
+    });
+    const [learn, local] = loadChannelConfigs({ env: { HOME: dir }, cwd: dir });
+    expect(learn.headers).toEqual({ "CF-Access-Client-Id": "l" });
+    expect(local.headers).toBeUndefined();
+  });
+});

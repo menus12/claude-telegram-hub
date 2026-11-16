@@ -25,6 +25,7 @@ env (per-repo)  >  .telegram-hub.json (repo)  >  ~/.config/claude-telegram-hub/c
 | `TELEGRAM_HUB_LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` (logs go to stderr). |
 | `TELEGRAM_HUB_RECONNECT_INITIAL_MS` | no | `500` | Initial reconnect backoff. |
 | `TELEGRAM_HUB_RECONNECT_MAX_MS` | no | `15000` | Max reconnect backoff. |
+| `TELEGRAM_HUB_HEADERS` | no | — | JSON object of extra connect headers (e.g. Cloudflare Access service token). File form: `headers` object. |
 
 A repo-local `.telegram-hub.json` accepts the same keys in camelCase (`hubUrl`, `sessionSecret`,
 `agent`, …). See [`.env.example`](.env.example). Never commit secrets.

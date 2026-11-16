@@ -370,6 +370,18 @@ export function loadTelegramAdapterConfig(env: Env): TelegramAdapterConfig {
 
 // ── thin channel ──────────────────────────────────────────────────────────────
 
+/**
+ * Extra HTTP headers sent on the hub WebSocket upgrade — e.g. Cloudflare Access
+ * service-token headers (`CF-Access-Client-Id` / `CF-Access-Client-Secret`) when
+ * the hub sits behind an Access-protected public hostname (#123). Values are
+ * secrets: they are never logged.
+ */
+export const connectHeadersSchema = z.record(
+  z.string().regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/, "invalid header name"),
+  z.string().min(1).regex(/^[^\r\n]*$/, "header value must be a single line"),
+);
+export type ConnectHeaders = z.infer<typeof connectHeadersSchema>;
+
 export const channelConfigSchema = z.object({
   /** Hub URL the session connects to; local or remote (e.g. ws://host:8787). */
   hubUrl: z.string().url(),
@@ -383,6 +395,8 @@ export const channelConfigSchema = z.object({
   reconnectMaxMs: z.number().int().positive().default(15000),
   /** Max size (MB) of a file this session will send out through the hub. */
   maxFileMb: z.number().int().positive().default(50),
+  /** Extra headers on the WebSocket upgrade (e.g. Cloudflare Access) (#123). */
+  headers: connectHeadersSchema.optional(),
 });
 export type ChannelConfig = z.infer<typeof channelConfigSchema>;
 
@@ -394,12 +408,15 @@ export const CHANNEL_ENV = {
   reconnectInitialMs: "TELEGRAM_HUB_RECONNECT_INITIAL_MS",
   reconnectMaxMs: "TELEGRAM_HUB_RECONNECT_MAX_MS",
   maxFileMb: "TELEGRAM_HUB_MAX_FILE_MB",
+  /** JSON object of extra connect headers, e.g. `{"CF-Access-Client-Id":"…"}`. */
+  headers: "TELEGRAM_HUB_HEADERS",
 } as const;
 
 /**
  * One layer of channel config. A single installed plugin attaches different
  * sessions to different hubs, so config resolves per-session from ordered
  * layers: env (per-repo) > repo file > machine defaults. Earlier layers win.
+ * Every value is a string; `headers` is carried as a JSON object string.
  */
 export type ChannelConfigLayer = Partial<
   Record<keyof ChannelConfig, string | undefined>
@@ -415,7 +432,21 @@ export function channelEnvLayer(env: Env): ChannelConfigLayer {
     reconnectInitialMs: env[CHANNEL_ENV.reconnectInitialMs],
     reconnectMaxMs: env[CHANNEL_ENV.reconnectMaxMs],
     maxFileMb: env[CHANNEL_ENV.maxFileMb],
+    headers: env[CHANNEL_ENV.headers],
   };
+}
+
+/**
+ * Parse a layer's `headers` JSON string. Malformed JSON fails loudly without
+ * echoing the value (it holds secrets); shape is validated by the schema.
+ */
+export function parseHeadersLayer(raw: string | undefined): unknown {
+  if (raw === undefined || raw === "") return undefined;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error("channel config: headers must be a JSON object (value not shown)");
+  }
 }
 
 /**
@@ -443,6 +474,7 @@ export function resolveChannelConfig(
       reconnectInitialMs: num(pick("reconnectInitialMs")),
       reconnectMaxMs: num(pick("reconnectMaxMs")),
       maxFileMb: num(pick("maxFileMb")),
+      headers: parseHeadersLayer(pick("headers")),
     },
     "channel",
   );
@@ -461,6 +493,8 @@ export const hubEntrySchema = z.object({
   hubUrl: z.string().url(),
   sessionSecret: z.string().min(1),
   agent: z.string().min(1),
+  /** Extra connect headers for this hub only (e.g. its Cloudflare Access token). */
+  headers: connectHeadersSchema.optional(),
 });
 export type HubEntry = z.infer<typeof hubEntrySchema>;
 

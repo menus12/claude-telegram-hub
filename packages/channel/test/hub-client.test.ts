@@ -177,3 +177,62 @@ describe("HubClient", () => {
     expect(inbound).toHaveLength(0);
   });
 });
+
+describe("HubClient connect headers (#123)", () => {
+  /** A hub behind an Access-like gate: the upgrade needs a header, else 403. */
+  async function startGatedHub(): Promise<FakeHub> {
+    const wss = new WebSocketServer({
+      port: 0,
+      host: "127.0.0.1",
+      verifyClient: (info, done) =>
+        info.req.headers["cf-access-client-id"] === "id-1" ? done(true) : done(false, 403, "Forbidden"),
+    });
+    await new Promise<void>((resolve) => wss.once("listening", () => resolve()));
+    const registrations: FakeHub["registrations"] = [];
+    wss.on("connection", (ws: WsSocket) => {
+      ws.on("message", (data) => {
+        const frame = JSON.parse(data.toString()) as Record<string, unknown>;
+        if (frame.type === "register") {
+          registrations.push({ agent: String(frame.agent), secret: String(frame.secret), protocolVersion: Number(frame.protocolVersion) });
+          ws.send(JSON.stringify({ type: "registered", agent: frame.agent, protocolVersion: frame.protocolVersion }));
+        }
+      });
+    });
+    const port = (wss.address() as AddressInfo).port;
+    return {
+      url: `ws://127.0.0.1:${port}`,
+      registrations,
+      server: wss,
+      close: () => new Promise<void>((resolve) => wss.close(() => resolve())),
+    };
+  }
+
+  it("sends the configured headers on the upgrade and registers", async () => {
+    hub = await startGatedHub();
+    let registered = false;
+    client = new HubClient(cfg(hub.url, { headers: { "CF-Access-Client-Id": "id-1", "CF-Access-Client-Secret": "s-1" } }), {
+      onInbound: () => {},
+      onRegistered: () => {
+        registered = true;
+      },
+    });
+    client.start();
+    await waitFor(() => registered);
+    expect(hub.registrations[0].agent).toBe("test-agent");
+  });
+
+  it("logs a 403 on the upgrade as blocked before the hub, without header values", async () => {
+    hub = await startGatedHub();
+    const logs: { level: string; msg: string; fields?: Record<string, unknown> }[] = [];
+    client = new HubClient(cfg(hub.url, { headers: { "CF-Access-Client-Id": "wrong", "CF-Access-Client-Secret": "s-1" } }), {
+      onInbound: () => {},
+      log: (level, msg, fields) => logs.push({ level, msg, fields }),
+    });
+    client.start();
+    await waitFor(() => logs.some((l) => l.msg.startsWith("blocked before reaching the hub")));
+    const blocked = logs.find((l) => l.msg.startsWith("blocked before reaching the hub"));
+    expect(blocked?.fields).toEqual({ headers: ["CF-Access-Client-Id", "CF-Access-Client-Secret"] });
+    expect(JSON.stringify(logs)).not.toContain("s-1");
+    expect(hub.registrations).toHaveLength(0);
+  });
+});
