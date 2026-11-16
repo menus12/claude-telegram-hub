@@ -1,4 +1,5 @@
-import WebSocket, { type RawData } from "ws";
+import WebSocket, { type ClientOptions, type RawData } from "ws";
+import { connectPlan, upgradeFailureHint, type ConnectPlan } from "./net.js";
 import {
   PROTOCOL_VERSION,
   hubToSessionFrameSchema,
@@ -53,7 +54,7 @@ export interface HubClientEvents {
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => void;
 }
 
-type WsFactory = (url: string, headers?: Record<string, string>) => WebSocket;
+type WsFactory = (url: string, options?: ClientOptions) => WebSocket;
 
 /**
  * The session's one persistent link to the hub. Not a poller: it holds a single
@@ -66,14 +67,21 @@ export class HubClient implements HubLike {
   private backoffMs: number;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private voiceReply: VoiceReplyCapsFrame | undefined;
+  /** How to reach the hub on this network (headers, proxy, CAs), resolved once. */
+  private readonly plan: ConnectPlan;
+  private planLogged = false;
 
   constructor(
     private readonly cfg: ChannelConfig,
     private readonly events: HubClientEvents,
-    private readonly wsFactory: WsFactory = (url, headers) =>
-      new WebSocket(url, headers ? { headers } : undefined),
+    private readonly wsFactory: WsFactory = (url, options) => new WebSocket(url, options),
   ) {
     this.backoffMs = cfg.reconnectInitialMs;
+    this.plan = connectPlan(cfg.hubUrl, {
+      ...(cfg.headers ? { headers: cfg.headers } : {}),
+      ...(cfg.proxy ? { proxy: cfg.proxy } : {}),
+      systemCa: cfg.systemCa ?? true,
+    });
   }
 
   start(): void {
@@ -121,8 +129,33 @@ export class HubClient implements HubLike {
   }
 
   private connect(): void {
-    const ws = this.wsFactory(this.cfg.hubUrl, this.cfg.headers);
+    if (!this.planLogged) {
+      this.planLogged = true;
+      this.events.log?.("info", "hub link", {
+        url: this.cfg.hubUrl,
+        proxy: this.plan.proxy ?? "direct",
+        systemCa: this.plan.systemCa,
+        headers: this.cfg.headers ? Object.keys(this.cfg.headers) : [],
+      });
+    }
+    const ws = this.wsFactory(this.cfg.hubUrl, this.plan.options);
     this.ws = ws;
+    // A non-101 answer to the upgrade: say who answered and why it's likely
+    // failing (Access, proxy auth, an inspecting proxy stripping the upgrade),
+    // then abort so the normal error/close/reconnect path runs (#125).
+    ws.on("unexpected-response", (_req, res) => {
+      const h = res.headers;
+      this.events.log?.("error", "hub connection refused before the WebSocket upgrade", {
+        status: res.statusCode,
+        ...(h.server ? { server: String(h.server) } : {}),
+        ...(h.via ? { via: String(h.via) } : {}),
+        ...(h["cache-status"] ? { cacheStatus: String(h["cache-status"]) } : {}),
+        ...(h["content-type"] ? { contentType: String(h["content-type"]) } : {}),
+        hint: upgradeFailureHint(res.statusCode ?? 0, h),
+      });
+      res.resume();
+      ws.terminate();
+    });
     ws.on("open", () => {
       this.backoffMs = this.cfg.reconnectInitialMs;
       this.events.log?.("info", "hub connection open; registering", {
@@ -138,11 +171,12 @@ export class HubClient implements HubLike {
     ws.on("message", (data: RawData) => this.onMessage(data));
     ws.on("error", (err: Error) => {
       this.events.log?.("warn", "hub connection error", { error: err.message });
-      // A 401/403 on the upgrade comes from in front of the hub (the hub itself
-      // rejects a bad secret after connecting), e.g. Cloudflare Access (#123).
-      if (/Unexpected server response: 40[13]/.test(err.message)) {
-        this.events.log?.("error", "blocked before reaching the hub — check the connect headers (Cloudflare Access token?)", {
-          headers: this.cfg.headers ? Object.keys(this.cfg.headers) : [],
+      if (/unable to get local issuer certificate|self[- ]signed certificate|unable to verify/i.test(err.message)) {
+        this.events.log?.("error", "TLS: the hub's certificate isn't trusted — likely a TLS-inspecting proxy", {
+          systemCa: this.plan.systemCa,
+          hint: this.plan.systemCa
+            ? "the OS store didn't help; set NODE_EXTRA_CA_CERTS to the proxy's root CA (PEM)"
+            : "enable systemCa, or set NODE_EXTRA_CA_CERTS to the proxy's root CA (PEM)",
         });
       }
     });

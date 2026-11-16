@@ -221,7 +221,7 @@ describe("HubClient connect headers (#123)", () => {
     expect(hub.registrations[0].agent).toBe("test-agent");
   });
 
-  it("logs a 403 on the upgrade as blocked before the hub, without header values", async () => {
+  it("logs a 403 on the upgrade as refused before the hub, without header values", async () => {
     hub = await startGatedHub();
     const logs: { level: string; msg: string; fields?: Record<string, unknown> }[] = [];
     client = new HubClient(cfg(hub.url, { headers: { "CF-Access-Client-Id": "wrong", "CF-Access-Client-Secret": "s-1" } }), {
@@ -229,10 +229,81 @@ describe("HubClient connect headers (#123)", () => {
       log: (level, msg, fields) => logs.push({ level, msg, fields }),
     });
     client.start();
-    await waitFor(() => logs.some((l) => l.msg.startsWith("blocked before reaching the hub")));
-    const blocked = logs.find((l) => l.msg.startsWith("blocked before reaching the hub"));
-    expect(blocked?.fields).toEqual({ headers: ["CF-Access-Client-Id", "CF-Access-Client-Secret"] });
+    const refused = "hub connection refused before the WebSocket upgrade";
+    await waitFor(() => logs.some((l) => l.msg === refused));
+    const blocked = logs.find((l) => l.msg === refused);
+    expect(blocked?.fields).toMatchObject({ status: 403, hint: expect.stringContaining("check the connect headers") });
+    // the startup line names the headers, never their values
+    expect(logs.find((l) => l.msg === "hub link")?.fields).toMatchObject({
+      proxy: "direct",
+      headers: ["CF-Access-Client-Id", "CF-Access-Client-Secret"],
+    });
     expect(JSON.stringify(logs)).not.toContain("s-1");
     expect(hub.registrations).toHaveLength(0);
+  });
+});
+
+describe("HubClient behind an HTTP proxy (#125)", () => {
+  /** A minimal CONNECT proxy that records the tunnels it opened. */
+  async function startConnectProxy(): Promise<{ url: string; tunnels: string[]; close: () => Promise<void> }> {
+    const { createServer } = await import("node:http");
+    const { connect } = await import("node:net");
+    const tunnels: string[] = [];
+    const server = createServer((_req, res) => res.writeHead(405).end());
+    server.on("connect", (req, client, head) => {
+      tunnels.push(String(req.url));
+      const [host, port] = String(req.url).split(":");
+      const upstream = connect(Number(port), host, () => {
+        client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        upstream.write(head);
+        upstream.pipe(client);
+        client.pipe(upstream);
+      });
+      upstream.on("error", () => client.destroy());
+      client.on("error", () => upstream.destroy());
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as AddressInfo).port;
+    return {
+      url: `http://127.0.0.1:${port}`,
+      tunnels,
+      close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
+    };
+  }
+
+  it("tunnels a WebSocket through the proxy with CONNECT", async () => {
+    hub = await startEchoHub();
+    const proxy = await startConnectProxy();
+    const { tunnelAgent } = await import("../src/net.js");
+    const WebSocket = (await import("ws")).default;
+    try {
+      const target = new URL(hub.url);
+      const ws = new WebSocket(hub.url, { agent: tunnelAgent(target, new URL(proxy.url)) });
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", () => resolve());
+        ws.once("error", reject);
+      });
+      ws.close();
+      expect(proxy.tunnels).toEqual([`127.0.0.1:${target.port}`]);
+    } finally {
+      await proxy.close();
+    }
+  });
+
+  it("reports a refused CONNECT as a connection error", async () => {
+    const { createServer } = await import("node:http");
+    const server = createServer();
+    server.on("connect", (_req, client) => client.end("HTTP/1.1 407 Proxy Authentication Required\r\n\r\n"));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const { tunnelAgent } = await import("../src/net.js");
+    const WebSocket = (await import("ws")).default;
+    try {
+      const proxyUrl = new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+      const ws = new WebSocket("ws://hub.example:8787", { agent: tunnelAgent(new URL("ws://hub.example:8787"), proxyUrl) });
+      const err = await new Promise<Error>((resolve) => ws.once("error", resolve));
+      expect(err.message).toContain("407");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import {
   channelConfigSchema,
   channelEnvLayer,
   hubEntrySchema,
+  parseBoolLayer,
   resolveChannelConfig,
   type ChannelConfig,
   type ChannelConfigLayer,
@@ -48,6 +50,8 @@ function fileLayer(path: string): ChannelConfigLayer {
     maxFileMb: str(obj.maxFileMb),
     // An object in the file; layers carry it as JSON (validated on resolve).
     headers: obj.headers === undefined || obj.headers === null ? undefined : JSON.stringify(obj.headers),
+    proxy: str(obj.proxy),
+    systemCa: str(obj.systemCa),
   };
 }
 
@@ -72,16 +76,30 @@ function fileRaw(path: string): Record<string, unknown> | undefined {
   return parsed as Record<string, unknown>;
 }
 
-/** Machine-wide defaults file, honoring XDG_CONFIG_HOME then ~/.config. */
-function machineConfigPath(env: Env): string | undefined {
-  const dir =
-    env.XDG_CONFIG_HOME ?? (env.HOME ? join(env.HOME, ".config") : undefined);
+/**
+ * Machine-wide defaults file: `$XDG_CONFIG_HOME`, else `$HOME/.config`, else the
+ * OS home dir's `.config` — Windows sets neither variable by default (#125), so
+ * `%USERPROFILE%\.config\claude-telegram-hub\config.json` is found there.
+ */
+function machineConfigPath(env: Env, home: string | undefined): string | undefined {
+  const base = env.HOME ?? home;
+  const dir = env.XDG_CONFIG_HOME ?? (base ? join(base, ".config") : undefined);
   return dir ? join(dir, "claude-telegram-hub", "config.json") : undefined;
+}
+
+function osHome(): string | undefined {
+  try {
+    return homedir() || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface LoadOptions {
   env?: Env;
   cwd?: string;
+  /** OS home dir fallback when `HOME` is unset (injectable for tests). */
+  homedir?: string;
 }
 
 /**
@@ -96,7 +114,7 @@ export interface LoadOptions {
 export function loadChannelConfig(opts: LoadOptions = {}): ChannelConfig {
   const env = opts.env ?? process.env;
   const cwd = opts.cwd ?? process.cwd();
-  const machinePath = machineConfigPath(env);
+  const machinePath = machineConfigPath(env, "homedir" in opts ? opts.homedir : osHome());
   const layers: ChannelConfigLayer[] = [
     channelEnvLayer(env),
     fileLayer(join(cwd, REPO_CONFIG_FILE)),
@@ -128,7 +146,7 @@ function asHubsArray(v: unknown): unknown[] | undefined {
 export function loadChannelConfigs(opts: LoadOptions = {}): LabeledChannelConfig[] {
   const env = opts.env ?? process.env;
   const cwd = opts.cwd ?? process.cwd();
-  const machinePath = machineConfigPath(env);
+  const machinePath = machineConfigPath(env, "homedir" in opts ? opts.homedir : osHome());
 
   const repoRaw = fileRaw(join(cwd, REPO_CONFIG_FILE));
   const machineRaw = machinePath ? fileRaw(machinePath) : undefined;
@@ -163,6 +181,9 @@ export function loadChannelConfigs(opts: LoadOptions = {}): LabeledChannelConfig
       reconnectInitialMs: num(pickShared("reconnectInitialMs")),
       reconnectMaxMs: num(pickShared("reconnectMaxMs")),
       maxFileMb: num(pickShared("maxFileMb")),
+      // The network path (proxy, CA store) is a property of this machine, shared by all hubs.
+      proxy: str(pickShared("proxy")),
+      systemCa: parseBoolLayer(str(pickShared("systemCa"))),
     });
     return { ...cfg, label: parsed.data.label };
   });
