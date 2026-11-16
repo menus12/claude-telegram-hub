@@ -117,6 +117,37 @@ root:
 Environment variables still override it. **Never commit secrets** — `.telegram-hub.json` is
 gitignored by this repo's `.gitignore`.
 
+## Remote agent over a public endpoint (Cloudflare Access)
+
+An agent on a machine **outside** the hub's network (e.g. a cloud VM with no VPN to the hub's site)
+reaches the hub through a public hostname on the hub's Cloudflare tunnel, gated by **Cloudflare
+Access with a service token**, so only holders of that token get as far as the hub. The hub's
+session secret is never the only barrier on a public hostname.
+
+1. The Cloudflare zone owner adds `hub-<project>.<zone>` → `http://hub:8787` to the project's tunnel,
+   an Access application with a **Service Auth** policy for one service token, and stores the token's
+   Client ID/Secret in the project's secret store. Leave Access **off** the bridge hostname (cloud
+   sessions can only send a bearer).
+2. On the remote machine, install the plugin as above and write the config (0600):
+   ```json
+   {
+     "hubUrl": "wss://hub-<project>.<zone>",
+     "sessionSecret": "<the hub's HUB_SESSION_SECRET>",
+     "agent": "<unique-name>",
+     "headers": {
+       "CF-Access-Client-Id": "<client id>",
+       "CF-Access-Client-Secret": "<client secret>"
+     }
+   }
+   ```
+3. Check: `curl -s -o /dev/null -w '%{http_code}' https://hub-<project>.<zone>/healthz` is `403`
+   without the headers and `200` with them. If the session can't connect, the channel log says
+   `blocked before reaching the hub — check the connect headers` (a 401/403 on the upgrade comes from
+   Access, not the hub).
+
+The hub's keepalive (`HUB_KEEPALIVE_MS`, 30 s) is below Cloudflare's ~100 s idle timeout, so the link
+stays up between messages.
+
 ## Attach one session to several hubs (multi-hub)
 
 A single session can attach to **multiple hubs at once** — e.g. a vendor/maintainer agent that

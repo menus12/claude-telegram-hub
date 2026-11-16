@@ -45,6 +45,9 @@ function fileLayer(path: string): ChannelConfigLayer {
     logLevel: str(obj.logLevel),
     reconnectInitialMs: str(obj.reconnectInitialMs),
     reconnectMaxMs: str(obj.reconnectMaxMs),
+    maxFileMb: str(obj.maxFileMb),
+    // An object in the file; layers carry it as JSON (validated on resolve).
+    headers: obj.headers === undefined || obj.headers === null ? undefined : JSON.stringify(obj.headers),
   };
 }
 
@@ -149,10 +152,13 @@ export function loadChannelConfigs(opts: LoadOptions = {}): LabeledChannelConfig
     if (!parsed.success) {
       throw new Error(`hubs[${i}] is invalid: ${parsed.error.issues.map((x) => x.message).join("; ")}`);
     }
+    // Headers are per hub (each public hub has its own Access token), so only the
+    // entry's own `headers` apply — never a shared/env value.
     const cfg = channelConfigSchema.parse({
       hubUrl: parsed.data.hubUrl,
       sessionSecret: parsed.data.sessionSecret,
       agent: parsed.data.agent,
+      ...(parsed.data.headers ? { headers: parsed.data.headers } : {}),
       logLevel: str(pickShared("logLevel")),
       reconnectInitialMs: num(pickShared("reconnectInitialMs")),
       reconnectMaxMs: num(pickShared("reconnectMaxMs")),

@@ -53,7 +53,7 @@ export interface HubClientEvents {
   log?: (level: LogLevel, msg: string, meta?: Record<string, unknown>) => void;
 }
 
-type WsFactory = (url: string) => WebSocket;
+type WsFactory = (url: string, headers?: Record<string, string>) => WebSocket;
 
 /**
  * The session's one persistent link to the hub. Not a poller: it holds a single
@@ -70,7 +70,8 @@ export class HubClient implements HubLike {
   constructor(
     private readonly cfg: ChannelConfig,
     private readonly events: HubClientEvents,
-    private readonly wsFactory: WsFactory = (url) => new WebSocket(url),
+    private readonly wsFactory: WsFactory = (url, headers) =>
+      new WebSocket(url, headers ? { headers } : undefined),
   ) {
     this.backoffMs = cfg.reconnectInitialMs;
   }
@@ -120,7 +121,7 @@ export class HubClient implements HubLike {
   }
 
   private connect(): void {
-    const ws = this.wsFactory(this.cfg.hubUrl);
+    const ws = this.wsFactory(this.cfg.hubUrl, this.cfg.headers);
     this.ws = ws;
     ws.on("open", () => {
       this.backoffMs = this.cfg.reconnectInitialMs;
@@ -137,6 +138,13 @@ export class HubClient implements HubLike {
     ws.on("message", (data: RawData) => this.onMessage(data));
     ws.on("error", (err: Error) => {
       this.events.log?.("warn", "hub connection error", { error: err.message });
+      // A 401/403 on the upgrade comes from in front of the hub (the hub itself
+      // rejects a bad secret after connecting), e.g. Cloudflare Access (#123).
+      if (/Unexpected server response: 40[13]/.test(err.message)) {
+        this.events.log?.("error", "blocked before reaching the hub — check the connect headers (Cloudflare Access token?)", {
+          headers: this.cfg.headers ? Object.keys(this.cfg.headers) : [],
+        });
+      }
     });
     ws.on("close", () => {
       this.events.log?.("info", "hub connection closed");
