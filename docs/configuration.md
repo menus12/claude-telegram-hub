@@ -84,6 +84,8 @@ back to `agentFallback` (the working-dir basename) when no layer supplies an age
 | `TELEGRAM_HUB_RECONNECT_MAX_MS` | int | `15000` | Maximum reconnect backoff. |
 | `TELEGRAM_HUB_MAX_FILE_MB` | int | `50` | Max size of a file this session sends out via `send_file`. (Inbound files are capped at 20 MB by the Telegram Bot API's download limit.) |
 | `TELEGRAM_HUB_HEADERS` | JSON object | — | Extra headers on the WebSocket upgrade, e.g. Cloudflare Access `{"CF-Access-Client-Id":"…","CF-Access-Client-Secret":"…"}` for a hub behind an Access-protected public hostname. In a config file use a `headers` object (per entry in `hubs[]`). Values are secrets and never logged. |
+| `TELEGRAM_HUB_PROXY` | URL \| `off` | — | HTTP(S) proxy for the hub link (`http://[user:pass@]host:port`), tunnelled with `CONNECT`; `off` forces direct. Unset → `HTTPS_PROXY` (wss) / `HTTP_PROXY` (ws), honoring `NO_PROXY`. Loopback is always direct. File form: `proxy`. |
+| `TELEGRAM_HUB_SYSTEM_CA` | bool | `true` | Also trust the OS certificate store (Windows store / system bundle) for `wss://`, so a corporate TLS-inspection CA works. Needs Node ≥ 22.15; on older Node use `NODE_EXTRA_CA_CERTS`. File form: `systemCa`. |
 
 > `TELEGRAM_HUB_SECRET` and `HUB_SESSION_SECRET` are the **same secret** viewed from the two
 > sides. Keep them in sync per deployment.

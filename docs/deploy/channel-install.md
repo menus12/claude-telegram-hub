@@ -148,6 +148,30 @@ session secret is never the only barrier on a public hostname.
 The hub's keepalive (`HUB_KEEPALIVE_MS`, 30 s) is below Cloudflare's ~100 s idle timeout, so the link
 stays up between messages.
 
+### Corporate networks: HTTP proxy and TLS inspection
+
+- **Proxy:** the channel honors `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` (or `"proxy"` in the config
+  file) and tunnels the hub link with `CONNECT`. The startup log line `hub link` shows the proxy in use.
+- **TLS inspection:** the channel trusts the OS certificate store as well as Node's bundled CAs
+  (`"systemCa": true`, the default, on Node ≥ 22.15), so a proxy that re-signs with an enterprise CA
+  installed in the Windows store is accepted. On older Node set `NODE_EXTRA_CA_CERTS` to the CA's PEM.
+- **WebSocket upgrade stripped:** some inspecting proxies turn the upgrade into a plain `GET`; the
+  channel then logs `hub connection refused before the WebSocket upgrade` with status 404 and a hint.
+  No client setting fixes that: ask IT to exempt the hub host from TLS inspection (a plain `CONNECT`
+  tunnel carries WebSockets).
+- **Windows:** the machine config is `%USERPROFILE%\.config\claude-telegram-hub\config.json`
+  (used when `HOME`/`XDG_CONFIG_HOME` aren't set).
+
+### Troubleshooting: `/mcp` shows `CONNECTION_CLOSED`
+
+The channel process exited at startup, almost always a config error or `node` missing from the PATH
+of the shell that launched Claude Code. The reason is in the MCP log, not on screen:
+- Windows: `%LOCALAPPDATA%\claude-cli-nodejs\Cache\<project>\mcp-logs-plugin-telegram-hub-telegram-hub\`
+- macOS/Linux: `~/.cache/claude-cli-nodejs/<project>/mcp-logs-plugin-telegram-hub-telegram-hub/`
+
+Or run the channel by hand from the repo: `node packages/channel/dist/main.cjs </dev/null` (config
+errors name the field, never its value).
+
 ## Attach one session to several hubs (multi-hub)
 
 A single session can attach to **multiple hubs at once** — e.g. a vendor/maintainer agent that

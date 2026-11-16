@@ -397,6 +397,13 @@ export const channelConfigSchema = z.object({
   maxFileMb: z.number().int().positive().default(50),
   /** Extra headers on the WebSocket upgrade (e.g. Cloudflare Access) (#123). */
   headers: connectHeadersSchema.optional(),
+  /**
+   * HTTP(S) proxy for the hub link (`http://[user:pass@]host:port`), or `off` to
+   * force a direct connection. Unset → `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` (#125).
+   */
+  proxy: z.string().min(1).optional(),
+  /** Trust the OS certificate store too (corporate TLS-inspection CAs); unset = true (#125). */
+  systemCa: z.boolean().optional(),
 });
 export type ChannelConfig = z.infer<typeof channelConfigSchema>;
 
@@ -410,6 +417,8 @@ export const CHANNEL_ENV = {
   maxFileMb: "TELEGRAM_HUB_MAX_FILE_MB",
   /** JSON object of extra connect headers, e.g. `{"CF-Access-Client-Id":"…"}`. */
   headers: "TELEGRAM_HUB_HEADERS",
+  proxy: "TELEGRAM_HUB_PROXY",
+  systemCa: "TELEGRAM_HUB_SYSTEM_CA",
 } as const;
 
 /**
@@ -433,7 +442,17 @@ export function channelEnvLayer(env: Env): ChannelConfigLayer {
     reconnectMaxMs: env[CHANNEL_ENV.reconnectMaxMs],
     maxFileMb: env[CHANNEL_ENV.maxFileMb],
     headers: env[CHANNEL_ENV.headers],
+    proxy: env[CHANNEL_ENV.proxy],
+    systemCa: env[CHANNEL_ENV.systemCa],
   };
+}
+
+/** Parse a boolean layer value (`true/false/1/0/yes/no/on/off`); other text fails validation. */
+export function parseBoolLayer(raw: string | undefined): boolean | string | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  if (/^(true|1|yes|on)$/i.test(raw)) return true;
+  if (/^(false|0|no|off)$/i.test(raw)) return false;
+  return raw;
 }
 
 /**
@@ -475,6 +494,8 @@ export function resolveChannelConfig(
       reconnectMaxMs: num(pick("reconnectMaxMs")),
       maxFileMb: num(pick("maxFileMb")),
       headers: parseHeadersLayer(pick("headers")),
+      proxy: pick("proxy"),
+      systemCa: parseBoolLayer(pick("systemCa")),
     },
     "channel",
   );

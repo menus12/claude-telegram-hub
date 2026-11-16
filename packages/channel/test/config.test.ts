@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { loadChannelConfig, loadChannelConfigs } from "../src/index.js";
@@ -157,5 +157,22 @@ describe("connect headers (#123)", () => {
     const [learn, local] = loadChannelConfigs({ env: { HOME: dir }, cwd: dir });
     expect(learn.headers).toEqual({ "CF-Access-Client-Id": "l" });
     expect(local.headers).toBeUndefined();
+  });
+});
+
+describe("machine config on Windows (#125)", () => {
+  it("falls back to the OS home dir when HOME/XDG_CONFIG_HOME are unset", () => {
+    const cfgDir = join(dir, ".config", "claude-telegram-hub");
+    mkdirSync(cfgDir, { recursive: true });
+    writeFileSync(join(cfgDir, "config.json"), JSON.stringify({ hubUrl: "wss://h.example", sessionSecret: "s", agent: "a", proxy: "off", systemCa: false }));
+    const cwd = mkdtempSync(join(tmpdir(), "cth-cwd-"));
+    try {
+      const cfg = loadChannelConfig({ env: {}, cwd, homedir: dir });
+      expect(cfg.hubUrl).toBe("wss://h.example");
+      expect(cfg.proxy).toBe("off");
+      expect(cfg.systemCa).toBe(false);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
